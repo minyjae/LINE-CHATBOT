@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
 	"log"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"minyjae/go-starter/internal/adapters/http/routes"
+	"minyjae/go-starter/internal/adapters/jobs"
 	lineAdapter "minyjae/go-starter/internal/adapters/line"
 	"minyjae/go-starter/internal/adapters/presistance/repositories"
 	"minyjae/go-starter/internal/config"
@@ -47,6 +50,18 @@ func main() {
 		assistantService,
 	)
 	lineMessenger := lineAdapter.NewClient(cfg.LineChannelAccessToken)
+
+	if cfg.ReminderWorkerEnabled {
+		reminderWorker := jobs.NewReminderWorker(
+			reminderRepo,
+			lineUserRepo,
+			messageLogRepo,
+			lineMessenger,
+			time.Duration(cfg.ReminderWorkerIntervalSeconds)*time.Second,
+			cfg.ReminderWorkerBatchSize,
+		)
+		reminderWorker.Start(context.Background())
+	}
 
 	resp := utils.NewResponse()
 	app := fiber.New(fiber.Config{
