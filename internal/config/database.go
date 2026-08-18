@@ -7,6 +7,7 @@ import (
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"minyjae/go-starter/internal/adapters/presistance/models"
 )
 
 func SetupDatabase(config *Config) *gorm.DB {
@@ -60,7 +61,20 @@ func shouldRunMigration() bool {
 func runMigration(db *gorm.DB) {
 	log.Println("Starting database migration...")
 
-	err := db.AutoMigrate()
+	err := db.AutoMigrate(
+		&models.User{},
+		&models.LineUser{},
+		&models.MessageLog{},
+		&models.AssistantIntent{},
+		&models.Todo{},
+		&models.Expense{},
+		&models.CalendarEvent{},
+		&models.Reminder{},
+		&models.Note{},
+		&models.ConversationSession{},
+		&models.IntegrationAccount{},
+		&models.EmbeddingDocument{},
+	)
 	if err != nil {
 		log.Fatal("Failed to migrate database:", err)
 	}
@@ -74,7 +88,20 @@ func RunMigrationManual(config *Config) error {
 
 	log.Println("Running manual migration...")
 
-	err := db.AutoMigrate()
+	err := db.AutoMigrate(
+		&models.User{},
+		&models.LineUser{},
+		&models.MessageLog{},
+		&models.AssistantIntent{},
+		&models.Todo{},
+		&models.Expense{},
+		&models.CalendarEvent{},
+		&models.Reminder{},
+		&models.Note{},
+		&models.ConversationSession{},
+		&models.IntegrationAccount{},
+		&models.EmbeddingDocument{},
+	)
 	if err != nil {
 		return fmt.Errorf("migration failed: %v", err)
 	}

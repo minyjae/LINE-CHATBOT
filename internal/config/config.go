@@ -9,22 +9,24 @@ import (
 )
 
 type Config struct {
-	AppEnv         string
-	AppPort        string
-	AppURL         string
-	AppPrefix      string
-	CorsAllows     string
-	DBHost         string
-	DBPort         string
-	DBUser         string
-	DBPassword     string
-	DBName         string
-	DBSSLMode      string
-	JWTSecret      string
-	JWTExpiresIn   string
-	AdminEmail     string
-	AdminFirstName string
-	AdminLastName  string
+	AppEnv                 string
+	AppPort                string
+	AppURL                 string
+	AppPrefix              string
+	CorsAllows             string
+	DBHost                 string
+	DBPort                 string
+	DBUser                 string
+	DBPassword             string
+	DBName                 string
+	DBSSLMode              string
+	JWTSecret              string
+	JWTExpiresIn           string
+	LineChannelSecret      string
+	LineChannelAccessToken string
+	AdminEmail             string
+	AdminFirstName         string
+	AdminLastName          string
 }
 
 func LoadConfig() (*Config, error) {
@@ -47,10 +49,12 @@ func LoadConfig() (*Config, error) {
 		CorsAllows:   getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:3000"),
 
 		// ค่าไม่ปลอดภัย
-		DBPassword: getEnv("DB_PASSWORD", ""),
-		DBName:     getEnv("DB_NAME", ""),
-		JWTSecret:  getEnv("JWT_SECRET", ""),
-		AdminEmail: getEnv("ADMIN_EMAIL", ""),
+		DBPassword:             getEnv("DB_PASSWORD", ""),
+		DBName:                 getEnv("DB_NAME", ""),
+		JWTSecret:              getEnv("JWT_SECRET", ""),
+		LineChannelSecret:      getEnv("LINE_CHANNEL_SECRET", ""),
+		LineChannelAccessToken: getEnv("LINE_CHANNEL_ACCESS_TOKEN", ""),
+		AdminEmail:             getEnv("ADMIN_EMAIL", ""),
 	}
 
 	if err := validateConfig(config); err != nil {
@@ -76,6 +80,12 @@ func validateConfig(config *Config) error {
 		}
 		if config.AdminEmail == "" {
 			return fmt.Errorf("ADMIN_EMAIL is required for production environment")
+		}
+		if config.LineChannelSecret == "" {
+			return fmt.Errorf("LINE_CHANNEL_SECRET is required for production environment")
+		}
+		if config.LineChannelAccessToken == "" {
+			return fmt.Errorf("LINE_CHANNEL_ACCESS_TOKEN is required for production environment")
 		}
 	}
 
