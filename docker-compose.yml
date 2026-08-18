@@ -1,0 +1,67 @@
+name: keep-pay-website
+
+services:
+    api:
+      build:
+        context: .
+        dockerfile: Dockerfile
+      container_name: keep-pay-api
+      restart: always
+      env_file:
+        - .env
+      environment:
+        # override host ให้ชี้ไปที่ container postgres แทน localhost
+        DB_HOST: postgres
+        DB_PORT: 5432
+      ports:
+        - "${APP_PORT}:8080"
+      depends_on:
+        postgres:
+          condition: service_healthy
+      networks:
+        - basic_fullstack_net
+
+    postgres:
+      image: postgres:latest
+      container_name: keep-pay-db
+      restart: always
+      environment:
+        POSTGRES_USER: ${DB_USER}
+        POSTGRES_PASSWORD: ${DB_PASSWORD}
+        POSTGRES_DB: ${DB_NAME}
+        SECRET_KEY: ${SECRET_KEY}
+      ports:
+        - "${DB_PORT}:5432"
+      volumes:
+        - postgres_data:/var/lib/postgresql/data
+      healthcheck:
+        test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+        interval: 5s
+        timeout: 5s
+        retries: 5
+      networks:
+        - basic_fullstack_net
+
+    pgadmin:
+      image: dpage/pgadmin4:latest
+      container_name: keep-pay-pgadmin
+      restart: always
+      environment:
+        PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+        PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+      ports:
+        - "${PGADMIN_PORT}:80"
+      depends_on:
+        - postgres
+      volumes:
+        - pgadmin_data:/var/lib/pgadmin
+      networks:
+        - basic_fullstack_net
+
+volumes:
+  postgres_data:
+  pgadmin_data:
+
+networks:
+  basic_fullstack_net:
+    driver: bridge
