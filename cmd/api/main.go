@@ -7,21 +7,13 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"minyjae/go-starter/internal/adapters/http/routes"
+	lineAdapter "minyjae/go-starter/internal/adapters/line"
+	"minyjae/go-starter/internal/adapters/presistance/repositories"
 	"minyjae/go-starter/internal/config"
+	coreServices "minyjae/go-starter/internal/core/services"
 	"minyjae/go-starter/utils"
 )
 
-// main: entry point ของ application
-//
-// ขั้นตอนการ bootstrap (เรียงตามลำดับ):
-//   1. โหลด config + เปิด connection ไป database
-//   2. wire-up repository → service ของแต่ละ domain
-//      ตัวอย่าง (เพิ่มเองหลังสร้าง implementation):
-//        exampleRepo := repositories.NewExampleRepository(db)
-//        exampleService := services.NewExampleServiceImpl(exampleRepo)
-//   3. สร้าง fiber app + register middleware (logger, cors, ...)
-//   4. ลงทะเบียน route ผ่าน routes.SetupRoute โดยส่ง service เข้าไปเป็น dep
-//   5. start server ที่ port ตาม config
 func main() {
 	cfg, err := config.LoadConfig()
 	if err != nil {
@@ -29,11 +21,32 @@ func main() {
 	}
 
 	db := config.SetupDatabase(cfg)
-	_ = db // TODO: ส่งต่อ db ไปยัง repository constructor ของแต่ละ domain
 
-	// === wire-up service ของแต่ละ domain ที่นี่ ===
-	// ดูตัวอย่างที่ internal/core/services/example.go และ
-	//                 internal/adapters/presistance/repositories/example.go
+	userRepo := repositories.NewUserRepository(db)
+	lineUserRepo := repositories.NewLineUserRepository(db)
+	messageLogRepo := repositories.NewMessageLogRepository(db)
+	assistantIntentRepo := repositories.NewAssistantIntentRepository(db)
+	todoRepo := repositories.NewTodoRepository(db)
+	expenseRepo := repositories.NewExpenseRepository(db)
+	calendarEventRepo := repositories.NewCalendarEventRepository(db)
+	reminderRepo := repositories.NewReminderRepository(db)
+	noteRepo := repositories.NewNoteRepository(db)
+
+	assistantService := coreServices.NewAssistantServiceImpl(
+		assistantIntentRepo,
+		todoRepo,
+		expenseRepo,
+		calendarEventRepo,
+		reminderRepo,
+		noteRepo,
+	)
+	lineWebhookService := coreServices.NewLineWebhookServiceImpl(
+		userRepo,
+		lineUserRepo,
+		messageLogRepo,
+		assistantService,
+	)
+	lineMessenger := lineAdapter.NewClient(cfg.LineChannelAccessToken)
 
 	resp := utils.NewResponse()
 	app := fiber.New(fiber.Config{
@@ -48,7 +61,7 @@ func main() {
 		AllowCredentials: true,
 	}))
 
-	routes.SetupRoute(app)
+	routes.SetupRoute(app, lineWebhookService, lineMessenger, cfg.LineChannelSecret)
 	log.Printf("Server starting on port %s", cfg.AppPort)
 	log.Fatal(app.Listen(":" + cfg.AppPort))
 }
