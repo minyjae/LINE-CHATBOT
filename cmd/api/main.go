@@ -49,6 +49,11 @@ func main() {
 		messageLogRepo,
 		assistantService,
 	)
+	todoService := coreServices.NewTodoServiceImpl(todoRepo)
+	expenseService := coreServices.NewExpenseServiceImpl(expenseRepo)
+	calendarEventService := coreServices.NewCalendarEventServiceImpl(calendarEventRepo)
+	reminderService := coreServices.NewReminderServiceImpl(reminderRepo)
+	noteService := coreServices.NewNoteServiceImpl(noteRepo)
 	lineMessenger := lineAdapter.NewClient(cfg.LineChannelAccessToken)
 
 	if cfg.ReminderWorkerEnabled {
@@ -76,7 +81,19 @@ func main() {
 		AllowCredentials: true,
 	}))
 
-	routes.SetupRoute(app, lineWebhookService, lineMessenger, cfg.LineChannelSecret)
+	routes.SetupRoute(
+		app,
+		lineWebhookService,
+		lineMessenger,
+		cfg.LineChannelSecret,
+		routes.DashboardServices{
+			Todo:          todoService,
+			Expense:       expenseService,
+			CalendarEvent: calendarEventService,
+			Reminder:      reminderService,
+			Note:          noteService,
+		},
+	)
 	log.Printf("Server starting on port %s", cfg.AppPort)
 	log.Fatal(app.Listen(":" + cfg.AppPort))
 }

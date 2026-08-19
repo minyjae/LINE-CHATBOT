@@ -12,6 +12,8 @@ func SetupRoute(
 	lineWebhookService servicePort.LineWebhookService,
 	lineMessenger lineAdapter.Messenger,
 	lineChannelSecret string,
+	dashboardServices DashboardServices,
 ) {
 	LineRoute(app, lineWebhookService, lineMessenger, lineChannelSecret)
+	DashboardRoute(app, dashboardServices)
 }
