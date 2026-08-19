@@ -14,6 +14,9 @@ type ExpenseSummary struct {
 }
 
 type ExpenseService interface {
+	Create(userID uint, expense *entities.Expense) (*entities.Expense, error)
 	List(userID uint, limit, offset int) ([]*entities.Expense, error)
 	SummaryByMonth(userID uint, year int, month time.Month, loc *time.Location) (*ExpenseSummary, error)
+	Update(userID, id uint, expense *entities.Expense) (*entities.Expense, error)
+	Delete(userID, id uint) error
 }

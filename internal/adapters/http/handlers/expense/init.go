@@ -10,6 +10,9 @@ import (
 type IExpenseController interface {
 	List(c *fiber.Ctx) error
 	Summary(c *fiber.Ctx) error
+	Create(c *fiber.Ctx) error
+	Update(c *fiber.Ctx) error
+	Delete(c *fiber.Ctx) error
 }
 
 type expenseController struct {

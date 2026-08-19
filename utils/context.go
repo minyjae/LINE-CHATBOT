@@ -31,3 +31,12 @@ func UserIDFromLocals(c *fiber.Ctx) (uint, bool) {
 		return 0, false
 	}
 }
+
+func UintParam(c *fiber.Ctx, name string) (uint, bool) {
+	value := c.Params(name)
+	parsed, err := strconv.ParseUint(value, 10, 64)
+	if err != nil || parsed == 0 {
+		return 0, false
+	}
+	return uint(parsed), true
+}

@@ -10,6 +10,9 @@ import (
 type ITodoController interface {
 	List(c *fiber.Ctx) error
 	ListPending(c *fiber.Ctx) error
+	Create(c *fiber.Ctx) error
+	Update(c *fiber.Ctx) error
+	Delete(c *fiber.Ctx) error
 }
 
 type todoController struct {

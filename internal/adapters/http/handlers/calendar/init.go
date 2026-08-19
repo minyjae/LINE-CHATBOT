@@ -10,6 +10,9 @@ import (
 type ICalendarController interface {
 	List(c *fiber.Ctx) error
 	ListByDate(c *fiber.Ctx) error
+	Create(c *fiber.Ctx) error
+	Update(c *fiber.Ctx) error
+	Delete(c *fiber.Ctx) error
 }
 
 type calendarController struct {
