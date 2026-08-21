@@ -8,6 +8,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
+	openaiAdapter "minyjae/go-starter/internal/adapters/ai/openai"
 	"minyjae/go-starter/internal/adapters/http/routes"
 	"minyjae/go-starter/internal/adapters/jobs"
 	lineAdapter "minyjae/go-starter/internal/adapters/line"
@@ -35,6 +36,7 @@ func main() {
 	reminderRepo := repositories.NewReminderRepository(db)
 	noteRepo := repositories.NewNoteRepository(db)
 
+	intentParser := openaiAdapter.NewIntentParser(cfg.OpenAIAPIKey, cfg.OpenAIIntentModel)
 	assistantService := coreServices.NewAssistantServiceImpl(
 		assistantIntentRepo,
 		todoRepo,
@@ -42,6 +44,7 @@ func main() {
 		calendarEventRepo,
 		reminderRepo,
 		noteRepo,
+		intentParser,
 	)
 	lineWebhookService := coreServices.NewLineWebhookServiceImpl(
 		userRepo,

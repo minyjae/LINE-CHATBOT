@@ -25,6 +25,8 @@ type Config struct {
 	JWTExpiresIn                  string
 	LineChannelSecret             string
 	LineChannelAccessToken        string
+	OpenAIAPIKey                  string
+	OpenAIIntentModel             string
 	ReminderWorkerEnabled         bool
 	ReminderWorkerIntervalSeconds int
 	ReminderWorkerBatchSize       int
@@ -58,6 +60,8 @@ func LoadConfig() (*Config, error) {
 		JWTSecret:                     getEnv("JWT_SECRET", ""),
 		LineChannelSecret:             getEnv("LINE_CHANNEL_SECRET", ""),
 		LineChannelAccessToken:        getEnv("LINE_CHANNEL_ACCESS_TOKEN", ""),
+		OpenAIAPIKey:                  getEnv("OPENAI_API_KEY", ""),
+		OpenAIIntentModel:             getEnv("OPENAI_INTENT_MODEL", "gpt-5"),
 		ReminderWorkerEnabled:         getEnvBool("REMINDER_WORKER_ENABLED", false),
 		ReminderWorkerIntervalSeconds: getEnvInt("REMINDER_WORKER_INTERVAL_SECONDS", 60),
 		ReminderWorkerBatchSize:       getEnvInt("REMINDER_WORKER_BATCH_SIZE", 50),
