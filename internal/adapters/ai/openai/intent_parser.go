@@ -45,7 +45,7 @@ func (p *IntentParser) Parse(input types.IntentParseInput) (*types.ParsedAssista
 		"input": []map[string]string{
 			{
 				"role":    "system",
-				"content": "You classify Thai or English personal assistant messages. Return only JSON matching the schema. Use ISO 8601 timestamps with timezone when extracting dates. Supported intents: create_expense, expense_summary, expense_report_daily, expense_report_weekly, expense_report_monthly, create_todo, tomorrow_summary, create_reminder, create_note, create_calendar_event, unknown. Calendar events should require a clear scheduling intent such as นัด, เพิ่มนัด, ลงตาราง, ประชุม, meeting, or a person/event plus date/time. Questions about what was bought, eaten, spent, or expense lists should be expense_report_* instead of calendar.",
+				"content": "You classify Thai or English personal assistant messages. Return only JSON matching the schema. Use ISO 8601 timestamps with timezone when extracting dates. Supported intents: create_expense, expense_summary, expense_report_daily, expense_report_weekly, expense_report_monthly, create_todo, tomorrow_summary, create_reminder, create_note, create_calendar_event, cancel_calendar_event, unknown. Calendar events should require a clear scheduling intent such as นัด, เพิ่มนัด, ลงตาราง, ประชุม, meeting, or a person/event plus date/time. Messages such as ยกเลิกนัด, ลบนัด, cancel meeting, or cancel event should be cancel_calendar_event. Questions about what was bought, eaten, spent, or expense lists should be expense_report_* instead of calendar.",
 			},
 			{
 				"role":    "user",
@@ -179,6 +179,7 @@ func intentSchema() map[string]any {
 					"create_reminder",
 					"create_note",
 					"create_calendar_event",
+					"cancel_calendar_event",
 					"unknown",
 				},
 			},

@@ -50,6 +50,8 @@ func (s *assistantService) handleParsedIntent(input types.AssistantMessageInput,
 		return s.handleParsedCreateNote(input, parsed, text, now)
 	case "create_calendar_event":
 		return s.handleParsedCreateCalendarEvent(input, parsed, text, now, loc)
+	case "cancel_calendar_event":
+		return s.handleCancelCalendarEvent(input, text, now, loc)
 	default:
 		return s.saveParsedUnknownIntent(input, parsed, now)
 	}

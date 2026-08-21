@@ -62,7 +62,7 @@ func (s *assistantService) HandleTextMessage(input types.AssistantMessageInput) 
 		return s.saveUnknownIntent(input, "ตอนนี้ยังรองรับการบันทึกและสรุปรายจ่ายก่อนครับ รายรับยังไม่ได้เปิดใช้งานครับ")
 	}
 	if isCalendarCancelCommand(text) {
-		return s.saveUnknownIntent(input, "ตอนนี้ยังยกเลิกนัดผ่าน LINE ไม่ได้ครับ แต่ดูหรือแก้ไขนัดได้จาก dashboard ก่อนครับ")
+		return s.handleCancelCalendarEvent(input, text, now, loc)
 	}
 
 	if result, ok := s.handleWithIntentParser(input, text, now, loc); ok {
@@ -305,6 +305,79 @@ func (s *assistantService) handleCreateCalendarEvent(input types.AssistantMessag
 		Intent:    intent.Intent,
 		ReplyText: fmt.Sprintf("เพิ่มนัด \"%s\" เวลา %s แล้วครับ", event.Title, event.StartAt.Format("02 Jan 2006 15:04")),
 		Data:      event,
+	}, nil
+}
+
+type calendarCancelRequest struct {
+	Title   string
+	Start   time.Time
+	End     time.Time
+	HasDate bool
+	HasTime bool
+	Hour    int
+	Minute  int
+}
+
+func (s *assistantService) handleCancelCalendarEvent(input types.AssistantMessageInput, text string, now time.Time, loc *time.Location) (*types.AssistantMessageResult, error) {
+	request := parseCalendarCancelRequest(text, now, loc)
+	if request.Title == "" && !request.HasDate && !request.HasTime {
+		return s.saveCalendarCancelIntent(input, now, request, "needs_clarification", "อยากยกเลิกนัดไหนครับ ระบุชื่อ วัน หรือเวลาเพิ่มอีกนิด เช่น \"ยกเลิกนัดพรุ่งนี้ 10 โมง ประชุมกับทีม\"", nil)
+	}
+
+	candidates, err := s.calendarRepo.ListByStartBetween(input.UserID, request.Start, request.End)
+	if err != nil {
+		return nil, err
+	}
+
+	matches := filterCalendarCancelCandidates(candidates, request, loc)
+	if len(matches) == 0 {
+		return s.saveCalendarCancelIntent(input, now, request, "not_found", "ไม่พบนัดที่ตรงกับข้อความนี้ครับ ลองระบุวัน เวลา หรือชื่อนัดให้ชัดขึ้นอีกนิดครับ", nil)
+	}
+	if len(matches) > 1 {
+		return s.saveCalendarCancelIntent(input, now, request, "needs_clarification", formatCalendarCancelClarification(matches, loc), matches)
+	}
+
+	event := matches[0]
+	if err := s.calendarRepo.Delete(event.ID); err != nil {
+		return nil, err
+	}
+
+	reply := fmt.Sprintf("ยกเลิกนัด \"%s\" เวลา %s แล้วครับ", event.Title, event.StartAt.In(loc).Format("02 Jan 2006 15:04"))
+	return s.saveCalendarCancelIntent(input, now, request, "completed", reply, matches)
+}
+
+func (s *assistantService) saveCalendarCancelIntent(input types.AssistantMessageInput, now time.Time, request calendarCancelRequest, status, reply string, matches []*entities.CalendarEvent) (*types.AssistantMessageResult, error) {
+	matchIDs := make([]uint, 0, len(matches))
+	for _, match := range matches {
+		matchIDs = append(matchIDs, match.ID)
+	}
+
+	entitiesJSON := marshalEntities(map[string]any{
+		"title":     request.Title,
+		"start":     request.Start,
+		"end":       request.End,
+		"has_date":  request.HasDate,
+		"has_time":  request.HasTime,
+		"match_ids": matchIDs,
+	})
+	intent, err := s.intentRepo.Create(&entities.AssistantIntent{
+		UserID:       input.UserID,
+		MessageLogID: input.MessageLogID,
+		Intent:       "cancel_calendar_event",
+		Confidence:   0.88,
+		Entities:     entitiesJSON,
+		Status:       status,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &types.AssistantMessageResult{
+		Intent:    intent.Intent,
+		ReplyText: reply,
+		Data:      map[string]any{"matches": matches, "status": status},
 	}, nil
 }
 
@@ -674,6 +747,51 @@ func parseNaturalTime(text string, now time.Time, loc *time.Location, defaultHou
 	return time.Date(date.Year(), date.Month(), date.Day(), hour, minute, 0, 0, loc), strings.Contains(text, "วันนี้") || strings.Contains(text, "พรุ่งนี้") || hasTime
 }
 
+func parseCalendarCancelRequest(text string, now time.Time, loc *time.Location) calendarCancelRequest {
+	current := now.In(loc)
+	title := cleanupCalendarCancelTitle(text)
+	hour, minute, hasTime := extractHourMinute(text)
+	hasDate := strings.Contains(text, "วันนี้") || strings.Contains(text, "พรุ่งนี้")
+
+	if strings.Contains(text, "พรุ่งนี้") {
+		date := current.AddDate(0, 0, 1)
+		start := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, loc)
+		return calendarCancelRequest{
+			Title:   title,
+			Start:   start,
+			End:     start.AddDate(0, 0, 1),
+			HasDate: true,
+			HasTime: hasTime,
+			Hour:    hour,
+			Minute:  minute,
+		}
+	}
+
+	if strings.Contains(text, "วันนี้") {
+		start := time.Date(current.Year(), current.Month(), current.Day(), 0, 0, 0, 0, loc)
+		return calendarCancelRequest{
+			Title:   title,
+			Start:   start,
+			End:     start.AddDate(0, 0, 1),
+			HasDate: true,
+			HasTime: hasTime,
+			Hour:    hour,
+			Minute:  minute,
+		}
+	}
+
+	start := time.Date(current.Year(), current.Month(), current.Day(), 0, 0, 0, 0, loc)
+	return calendarCancelRequest{
+		Title:   title,
+		Start:   start,
+		End:     start.AddDate(0, 0, 30),
+		HasDate: hasDate,
+		HasTime: hasTime,
+		Hour:    hour,
+		Minute:  minute,
+	}
+}
+
 func extractHourMinute(text string) (int, int, bool) {
 	colon := regexp.MustCompile(`(\d{1,2})[:.](\d{2})`)
 	if match := colon.FindStringSubmatch(text); len(match) == 3 {
@@ -699,6 +817,85 @@ func normalizeThaiHour(text string, hour int) int {
 		return hour + 12
 	}
 	return hour
+}
+
+func cleanupCalendarCancelTitle(text string) string {
+	cleaned := cleanupByRemoving(text, []string{
+		"ยกเลิกนัด", "ลบนัด", "ยกเลิกตาราง", "ลบตาราง",
+		"cancel meeting", "cancel event", "cancel",
+	})
+	return cleanupTimeWords(cleaned)
+}
+
+func filterCalendarCancelCandidates(events []*entities.CalendarEvent, request calendarCancelRequest, loc *time.Location) []*entities.CalendarEvent {
+	matches := make([]*entities.CalendarEvent, 0, len(events))
+	for _, event := range events {
+		if request.HasTime {
+			startAt := event.StartAt.In(loc)
+			if startAt.Hour() != request.Hour || startAt.Minute() != request.Minute {
+				continue
+			}
+		}
+		if request.Title != "" && !calendarTitleMatches(event.Title, request.Title) {
+			continue
+		}
+		matches = append(matches, event)
+	}
+	return matches
+}
+
+func calendarTitleMatches(title, query string) bool {
+	normalizedTitle := normalizeMatchText(title)
+	normalizedQuery := normalizeMatchText(query)
+	if normalizedQuery == "" {
+		return true
+	}
+	if normalizedTitle == normalizedQuery {
+		return true
+	}
+	if strings.Contains(normalizedTitle, normalizedQuery) || strings.Contains(normalizedQuery, normalizedTitle) {
+		return true
+	}
+
+	titleWords := strings.Fields(strings.ToLower(title))
+	queryWords := strings.Fields(strings.ToLower(query))
+	if len(titleWords) == 0 || len(queryWords) == 0 {
+		return false
+	}
+
+	overlap := 0
+	for _, queryWord := range queryWords {
+		for _, titleWord := range titleWords {
+			if queryWord == titleWord || strings.Contains(titleWord, queryWord) || strings.Contains(queryWord, titleWord) {
+				overlap++
+				break
+			}
+		}
+	}
+	return overlap > 0
+}
+
+func normalizeMatchText(text string) string {
+	lower := strings.ToLower(strings.TrimSpace(text))
+	re := regexp.MustCompile(`[\s"'“”‘’.,!?;:()\[\]{}_-]+`)
+	return re.ReplaceAllString(lower, "")
+}
+
+func formatCalendarCancelClarification(events []*entities.CalendarEvent, loc *time.Location) string {
+	limit := len(events)
+	if limit > 5 {
+		limit = 5
+	}
+
+	lines := []string{"เจอหลายนัดที่ใกล้เคียงครับ ระบุเวลา/ชื่อนัดให้ชัดขึ้นอีกนิด เช่น \"ยกเลิกนัด 10 โมง ประชุมกับทีม\""}
+	for i := 0; i < limit; i++ {
+		event := events[i]
+		lines = append(lines, fmt.Sprintf("- %s %s", event.StartAt.In(loc).Format("02 Jan 15:04"), event.Title))
+	}
+	if len(events) > limit {
+		lines = append(lines, fmt.Sprintf("และอีก %d นัดครับ", len(events)-limit))
+	}
+	return strings.Join(lines, "\n")
 }
 
 func formatExpenseReportReply(label string, expenses []*entities.Expense, total float64, loc *time.Location) string {
