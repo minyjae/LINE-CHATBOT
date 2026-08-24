@@ -1,11 +1,11 @@
-name: keep-pay-website
+name: line-chat-bot
 
 services:
     api:
       build:
         context: .
         dockerfile: Dockerfile
-      container_name: keep-pay-api
+      container_name: line-chat-bot-api
       restart: always
       env_file:
         - .env
@@ -19,11 +19,11 @@ services:
         postgres:
           condition: service_healthy
       networks:
-        - basic_fullstack_net
+        - line-chat-bot
 
     postgres:
-      image: postgres:latest
-      container_name: keep-pay-db
+      image: postgres:16-alpine
+      container_name: line-chat-bot-db
       restart: always
       environment:
         POSTGRES_USER: ${DB_USER}
@@ -40,11 +40,11 @@ services:
         timeout: 5s
         retries: 5
       networks:
-        - basic_fullstack_net
+        - line-chat-bot
 
     pgadmin:
       image: dpage/pgadmin4:latest
-      container_name: keep-pay-pgadmin
+      container_name: line-chat-bot-pgadmin
       restart: always
       environment:
         PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
@@ -56,12 +56,13 @@ services:
       volumes:
         - pgadmin_data:/var/lib/pgadmin
       networks:
-        - basic_fullstack_net
+        - line-chat-bot
 
 volumes:
   postgres_data:
   pgadmin_data:
 
 networks:
-  basic_fullstack_net:
+  line-chat-bot:
+    name: line-chat-bot
     driver: bridge

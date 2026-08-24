@@ -3,13 +3,17 @@ package line
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
 )
 
+var ErrMessengerNotConfigured = errors.New("line messenger is not configured")
+
 type Messenger interface {
 	ReplyText(replyToken, text string) error
+	PushText(to, text string) error
 }
 
 type Client struct {
@@ -40,12 +44,36 @@ func (c *Client) ReplyText(replyToken, text string) error {
 			},
 		},
 	}
+	return c.sendMessage("https://api.line.me/v2/bot/message/reply", payload)
+}
+
+func (c *Client) PushText(to, text string) error {
+	if c.channelAccessToken == "" {
+		return ErrMessengerNotConfigured
+	}
+	if to == "" || text == "" {
+		return nil
+	}
+
+	payload := map[string]any{
+		"to": to,
+		"messages": []map[string]string{
+			{
+				"type": "text",
+				"text": text,
+			},
+		},
+	}
+	return c.sendMessage("https://api.line.me/v2/bot/message/push", payload)
+}
+
+func (c *Client) sendMessage(url string, payload any) error {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, "https://api.line.me/v2/bot/message/reply", bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -59,7 +87,7 @@ func (c *Client) ReplyText(replyToken, text string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("line reply failed with status %d", resp.StatusCode)
+		return fmt.Errorf("line message request failed with status %d", resp.StatusCode)
 	}
 	return nil
 }

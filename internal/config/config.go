@@ -4,29 +4,35 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 
 	"github.com/joho/godotenv"
 )
 
 type Config struct {
-	AppEnv                 string
-	AppPort                string
-	AppURL                 string
-	AppPrefix              string
-	CorsAllows             string
-	DBHost                 string
-	DBPort                 string
-	DBUser                 string
-	DBPassword             string
-	DBName                 string
-	DBSSLMode              string
-	JWTSecret              string
-	JWTExpiresIn           string
-	LineChannelSecret      string
-	LineChannelAccessToken string
-	AdminEmail             string
-	AdminFirstName         string
-	AdminLastName          string
+	AppEnv                        string
+	AppPort                       string
+	AppURL                        string
+	AppPrefix                     string
+	CorsAllows                    string
+	DBHost                        string
+	DBPort                        string
+	DBUser                        string
+	DBPassword                    string
+	DBName                        string
+	DBSSLMode                     string
+	JWTSecret                     string
+	JWTExpiresIn                  string
+	LineChannelSecret             string
+	LineChannelAccessToken        string
+	OpenAIAPIKey                  string
+	OpenAIIntentModel             string
+	ReminderWorkerEnabled         bool
+	ReminderWorkerIntervalSeconds int
+	ReminderWorkerBatchSize       int
+	AdminEmail                    string
+	AdminFirstName                string
+	AdminLastName                 string
 }
 
 func LoadConfig() (*Config, error) {
@@ -49,12 +55,17 @@ func LoadConfig() (*Config, error) {
 		CorsAllows:   getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:3000"),
 
 		// ค่าไม่ปลอดภัย
-		DBPassword:             getEnv("DB_PASSWORD", ""),
-		DBName:                 getEnv("DB_NAME", ""),
-		JWTSecret:              getEnv("JWT_SECRET", ""),
-		LineChannelSecret:      getEnv("LINE_CHANNEL_SECRET", ""),
-		LineChannelAccessToken: getEnv("LINE_CHANNEL_ACCESS_TOKEN", ""),
-		AdminEmail:             getEnv("ADMIN_EMAIL", ""),
+		DBPassword:                    getEnv("DB_PASSWORD", ""),
+		DBName:                        getEnv("DB_NAME", ""),
+		JWTSecret:                     getEnv("JWT_SECRET", ""),
+		LineChannelSecret:             getEnv("LINE_CHANNEL_SECRET", ""),
+		LineChannelAccessToken:        getEnv("LINE_CHANNEL_ACCESS_TOKEN", ""),
+		OpenAIAPIKey:                  getEnv("OPENAI_API_KEY", ""),
+		OpenAIIntentModel:             getEnv("OPENAI_INTENT_MODEL", "gpt-5"),
+		ReminderWorkerEnabled:         getEnvBool("REMINDER_WORKER_ENABLED", false),
+		ReminderWorkerIntervalSeconds: getEnvInt("REMINDER_WORKER_INTERVAL_SECONDS", 60),
+		ReminderWorkerBatchSize:       getEnvInt("REMINDER_WORKER_BATCH_SIZE", 50),
+		AdminEmail:                    getEnv("ADMIN_EMAIL", ""),
 	}
 
 	if err := validateConfig(config); err != nil {
@@ -101,4 +112,28 @@ func getEnv(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+func getEnvBool(key string, defaultValue bool) bool {
+	value := os.Getenv(key)
+	if value == "" {
+		return defaultValue
+	}
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
+		return defaultValue
+	}
+	return parsed
+}
+
+func getEnvInt(key string, defaultValue int) int {
+	value := os.Getenv(key)
+	if value == "" {
+		return defaultValue
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return defaultValue
+	}
+	return parsed
 }
