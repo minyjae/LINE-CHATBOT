@@ -28,6 +28,7 @@ type IntentEntities struct {
 	DueAt       string   `json:"due_at,omitempty"`
 	RemindAt    string   `json:"remind_at,omitempty"`
 	SpentAt     string   `json:"spent_at,omitempty"`
+	ReceivedAt  string   `json:"received_at,omitempty"`
 	Location    string   `json:"location,omitempty"`
 	Priority    string   `json:"priority,omitempty"`
 	Tags        []string `json:"tags,omitempty"`

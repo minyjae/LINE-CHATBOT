@@ -3,6 +3,8 @@ package routes
 import (
 	calendarHandler "minyjae/go-starter/internal/adapters/http/handlers/calendar"
 	expenseHandler "minyjae/go-starter/internal/adapters/http/handlers/expense"
+	financeHandler "minyjae/go-starter/internal/adapters/http/handlers/finance"
+	incomeHandler "minyjae/go-starter/internal/adapters/http/handlers/income"
 	"minyjae/go-starter/internal/adapters/http/handlers/note"
 	reminderHandler "minyjae/go-starter/internal/adapters/http/handlers/reminder"
 	todoHandler "minyjae/go-starter/internal/adapters/http/handlers/todo"
@@ -15,6 +17,7 @@ import (
 type DashboardServices struct {
 	Todo          servicePort.TodoService
 	Expense       servicePort.ExpenseService
+	Income        servicePort.IncomeService
 	CalendarEvent servicePort.CalendarEventService
 	Reminder      servicePort.ReminderService
 	Note          servicePort.NoteService
@@ -36,6 +39,16 @@ func DashboardRoute(app *fiber.App, services DashboardServices) {
 	group.Post("/expenses", expenseController.Create)
 	group.Put("/expenses/:id", expenseController.Update)
 	group.Delete("/expenses/:id", expenseController.Delete)
+
+	incomeController := incomeHandler.NewIncomeController(services.Income)
+	group.Get("/incomes", incomeController.List)
+	group.Get("/incomes/summary", incomeController.Summary)
+	group.Post("/incomes", incomeController.Create)
+	group.Put("/incomes/:id", incomeController.Update)
+	group.Delete("/incomes/:id", incomeController.Delete)
+
+	financeController := financeHandler.NewFinanceController(services.Expense, services.Income)
+	group.Get("/finance/summary", financeController.Summary)
 
 	calendarController := calendarHandler.NewCalendarController(services.CalendarEvent)
 	group.Get("/calendar/events", calendarController.List)

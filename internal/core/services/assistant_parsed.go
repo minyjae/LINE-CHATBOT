@@ -36,10 +36,16 @@ func (s *assistantService) handleParsedIntent(input types.AssistantMessageInput,
 	switch parsed.Intent {
 	case "create_expense":
 		return s.handleParsedCreateExpense(input, parsed, text, now, loc)
+	case "create_income":
+		return s.handleParsedCreateIncome(input, parsed, text, now, loc)
 	case "expense_summary":
 		return s.handleExpenseSummary(input, now)
 	case "expense_report_daily", "expense_report_weekly", "expense_report_monthly":
 		return s.handleParsedExpenseReport(input, parsed, text, now, loc)
+	case "income_report_daily", "income_report_weekly", "income_report_monthly":
+		return s.handleParsedIncomeReport(input, parsed, text, now, loc)
+	case "cashflow_report_daily", "cashflow_report_weekly", "cashflow_report_monthly":
+		return s.handleParsedCashflowReport(input, parsed, text, now, loc)
 	case "create_todo":
 		return s.handleParsedCreateTodo(input, parsed, text, now, loc)
 	case "tomorrow_summary":
@@ -66,6 +72,28 @@ func (s *assistantService) handleParsedExpenseReport(input types.AssistantMessag
 		return nil, fmt.Errorf("parsed expense report period is missing")
 	}
 	return s.handleExpenseReport(input, now, loc, period)
+}
+
+func (s *assistantService) handleParsedIncomeReport(input types.AssistantMessageInput, parsed *types.ParsedAssistantIntent, text string, now time.Time, loc *time.Location) (*types.AssistantMessageResult, error) {
+	period, ok := expenseReportPeriodFromParsed(parsed, now, loc)
+	if !ok {
+		_, period, ok = parseMoneyReportRequest(text, now, loc)
+	}
+	if !ok {
+		return nil, fmt.Errorf("parsed income report period is missing")
+	}
+	return s.handleIncomeReport(input, now, loc, period)
+}
+
+func (s *assistantService) handleParsedCashflowReport(input types.AssistantMessageInput, parsed *types.ParsedAssistantIntent, text string, now time.Time, loc *time.Location) (*types.AssistantMessageResult, error) {
+	period, ok := expenseReportPeriodFromParsed(parsed, now, loc)
+	if !ok {
+		_, period, ok = parseMoneyReportRequest(text, now, loc)
+	}
+	if !ok {
+		return nil, fmt.Errorf("parsed cashflow report period is missing")
+	}
+	return s.handleCashflowReport(input, now, loc, period)
 }
 
 func (s *assistantService) handleParsedCreateExpense(input types.AssistantMessageInput, parsed *types.ParsedAssistantIntent, text string, now time.Time, loc *time.Location) (*types.AssistantMessageResult, error) {
@@ -101,6 +129,44 @@ func (s *assistantService) handleParsedCreateExpense(input types.AssistantMessag
 		Intent:    parsed.Intent,
 		ReplyText: fmt.Sprintf("Recorded %s %.2f %s.", expense.Description, expense.Amount, expense.Currency),
 		Data:      expense,
+	}, nil
+}
+
+func (s *assistantService) handleParsedCreateIncome(input types.AssistantMessageInput, parsed *types.ParsedAssistantIntent, text string, now time.Time, loc *time.Location) (*types.AssistantMessageResult, error) {
+	if parsed.Entities.Amount <= 0 {
+		return nil, fmt.Errorf("parsed income amount is missing")
+	}
+
+	receivedAt := now
+	if parsedAt, ok := parseOptionalIntentTime(parsed.Entities.ReceivedAt, loc); ok {
+		receivedAt = parsedAt
+	} else if parsedAt, ok := parseOptionalIntentTime(parsed.Entities.SpentAt, loc); ok {
+		receivedAt = parsedAt
+	}
+	description := firstNonEmpty(parsed.Entities.Description, parsed.Entities.Title, cleanupIncomeDescription(text))
+
+	income, err := s.incomeRepo.Create(&entities.Income{
+		UserID:          input.UserID,
+		Amount:          parsed.Entities.Amount,
+		Currency:        defaultString(parsed.Entities.Currency, "THB"),
+		Category:        defaultString(parsed.Entities.Category, "uncategorized"),
+		Description:     defaultString(description, "income"),
+		ReceivedAt:      receivedAt,
+		SourceMessageID: input.MessageLogID,
+		CreatedAt:       now,
+		UpdatedAt:       now,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err := s.saveParsedIntent(input, parsed, now); err != nil {
+		return nil, err
+	}
+
+	return &types.AssistantMessageResult{
+		Intent:    parsed.Intent,
+		ReplyText: fmt.Sprintf("Recorded %s %.2f %s.", income.Description, income.Amount, income.Currency),
+		Data:      income,
 	}, nil
 }
 
@@ -199,6 +265,10 @@ func (s *assistantService) handleParsedCreateNote(input types.AssistantMessageIn
 }
 
 func (s *assistantService) handleParsedCreateCalendarEvent(input types.AssistantMessageInput, parsed *types.ParsedAssistantIntent, text string, now time.Time, loc *time.Location) (*types.AssistantMessageResult, error) {
+	if !hasExplicitTime(text) {
+		return s.handleCreateNote(input, text, now)
+	}
+
 	title := firstNonEmpty(parsed.Entities.Title, cleanupCalendarTitle(text))
 	startAt, ok := parseOptionalIntentTime(parsed.Entities.StartAt, loc)
 	if title == "" || !ok {
@@ -313,11 +383,17 @@ func expenseReportPeriodFromParsed(parsed *types.ParsedAssistantIntent, now time
 	label := "ช่วงที่ขอ"
 	switch parsed.Intent {
 	case "expense_report_daily":
-		label = "วันนี้"
+		label = formatReportPeriodLabel("วันที่", start, end, loc)
 	case "expense_report_weekly":
-		label = "สัปดาห์นี้"
+		label = formatReportPeriodLabel("สัปดาห์", start, end, loc)
 	case "expense_report_monthly":
-		label = "เดือนนี้"
+		label = formatReportPeriodLabel("เดือน", start, end, loc)
+	case "income_report_daily", "cashflow_report_daily":
+		label = formatReportPeriodLabel("วันที่", start, end, loc)
+	case "income_report_weekly", "cashflow_report_weekly":
+		label = formatReportPeriodLabel("สัปดาห์", start, end, loc)
+	case "income_report_monthly", "cashflow_report_monthly":
+		label = formatReportPeriodLabel("เดือน", start, end, loc)
 	}
 
 	return expenseReportPeriod{

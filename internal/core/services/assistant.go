@@ -18,6 +18,7 @@ type assistantService struct {
 	intentRepo   repoPort.AssistantIntentRepository
 	todoRepo     repoPort.TodoRepository
 	expenseRepo  repoPort.ExpenseRepository
+	incomeRepo   repoPort.IncomeRepository
 	calendarRepo repoPort.CalendarEventRepository
 	reminderRepo repoPort.ReminderRepository
 	noteRepo     repoPort.NoteRepository
@@ -30,6 +31,7 @@ func NewAssistantServiceImpl(
 	intentRepo repoPort.AssistantIntentRepository,
 	todoRepo repoPort.TodoRepository,
 	expenseRepo repoPort.ExpenseRepository,
+	incomeRepo repoPort.IncomeRepository,
 	calendarRepo repoPort.CalendarEventRepository,
 	reminderRepo repoPort.ReminderRepository,
 	noteRepo repoPort.NoteRepository,
@@ -39,6 +41,7 @@ func NewAssistantServiceImpl(
 		intentRepo:   intentRepo,
 		todoRepo:     todoRepo,
 		expenseRepo:  expenseRepo,
+		incomeRepo:   incomeRepo,
 		calendarRepo: calendarRepo,
 		reminderRepo: reminderRepo,
 		noteRepo:     noteRepo,
@@ -55,14 +58,21 @@ func (s *assistantService) HandleTextMessage(input types.AssistantMessageInput) 
 	loc := loadLocation(input.Timezone)
 	now := input.Now.In(loc)
 
-	if period, ok := parseExpenseReportPeriod(text, now, loc); ok {
-		return s.handleExpenseReport(input, now, loc, period)
-	}
-	if isIncomeReportQuery(text) {
-		return s.saveUnknownIntent(input, "ตอนนี้ยังรองรับการบันทึกและสรุปรายจ่ายก่อนครับ รายรับยังไม่ได้เปิดใช้งานครับ")
+	if target, period, ok := parseMoneyReportRequest(text, now, loc); ok {
+		switch target {
+		case moneyReportTargetIncome:
+			return s.handleIncomeReport(input, now, loc, period)
+		case moneyReportTargetCashflow:
+			return s.handleCashflowReport(input, now, loc, period)
+		default:
+			return s.handleExpenseReport(input, now, loc, period)
+		}
 	}
 	if isCalendarCancelCommand(text) {
 		return s.handleCancelCalendarEvent(input, text, now, loc)
+	}
+	if looksLikeCalendarIntentWithoutTime(text) {
+		return s.handleCreateNote(input, text, now)
 	}
 
 	if result, ok := s.handleWithIntentParser(input, text, now, loc); ok {
@@ -84,14 +94,17 @@ func (s *assistantService) HandleTextMessage(input types.AssistantMessageInput) 
 	if isNoteCommand(text) {
 		return s.handleCreateNote(input, text, now)
 	}
+	if amount, ok := extractAmount(text); ok && looksLikeIncome(text) {
+		return s.handleCreateIncome(input, text, amount, now, loc)
+	}
 	if amount, ok := extractAmount(text); ok && looksLikeExpense(text) {
-		return s.handleCreateExpense(input, text, amount, now)
+		return s.handleCreateExpense(input, text, amount, now, loc)
 	}
 	if looksLikeCalendarEvent(text) {
 		return s.handleCreateCalendarEvent(input, text, now, loc)
 	}
 
-	return s.saveUnknownIntent(input, "ตอนนี้ผมยังเข้าใจได้เฉพาะ todo, รายจ่าย, นัดหมาย, เตือนความจำ, note และสรุปพรุ่งนี้ครับ")
+	return s.saveUnknownIntent(input, "ตอนนี้ผมยังเข้าใจได้เฉพาะ todo, รายรับ, รายจ่าย, นัดหมาย, เตือนความจำ, note และสรุปพรุ่งนี้ครับ")
 }
 
 func (s *assistantService) handleCreateTodo(input types.AssistantMessageInput, text string, now time.Time) (*types.AssistantMessageResult, error) {
@@ -135,9 +148,10 @@ func (s *assistantService) handleCreateTodo(input types.AssistantMessageInput, t
 	}, nil
 }
 
-func (s *assistantService) handleCreateExpense(input types.AssistantMessageInput, text string, amount float64, now time.Time) (*types.AssistantMessageResult, error) {
+func (s *assistantService) handleCreateExpense(input types.AssistantMessageInput, text string, amount float64, now time.Time, loc *time.Location) (*types.AssistantMessageResult, error) {
 	category := inferExpenseCategory(text)
 	description := cleanupExpenseDescription(text)
+	spentAt := parseMoneyEntryTime(text, now, loc)
 
 	expense, err := s.expenseRepo.Create(&entities.Expense{
 		UserID:          input.UserID,
@@ -145,7 +159,7 @@ func (s *assistantService) handleCreateExpense(input types.AssistantMessageInput
 		Currency:        "THB",
 		Category:        category,
 		Description:     description,
-		SpentAt:         now,
+		SpentAt:         spentAt,
 		SourceMessageID: input.MessageLogID,
 		CreatedAt:       now,
 		UpdatedAt:       now,
@@ -179,6 +193,54 @@ func (s *assistantService) handleCreateExpense(input types.AssistantMessageInput
 		Intent:    intent.Intent,
 		ReplyText: fmt.Sprintf("บันทึก%s %.2f บาทแล้วครับ", expense.Description, expense.Amount),
 		Data:      expense,
+	}, nil
+}
+
+func (s *assistantService) handleCreateIncome(input types.AssistantMessageInput, text string, amount float64, now time.Time, loc *time.Location) (*types.AssistantMessageResult, error) {
+	category := inferIncomeCategory(text)
+	description := cleanupIncomeDescription(text)
+	receivedAt := parseMoneyEntryTime(text, now, loc)
+
+	income, err := s.incomeRepo.Create(&entities.Income{
+		UserID:          input.UserID,
+		Amount:          amount,
+		Currency:        "THB",
+		Category:        category,
+		Description:     description,
+		ReceivedAt:      receivedAt,
+		SourceMessageID: input.MessageLogID,
+		CreatedAt:       now,
+		UpdatedAt:       now,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	entitiesJSON := marshalEntities(map[string]any{
+		"amount":      income.Amount,
+		"currency":    income.Currency,
+		"category":    income.Category,
+		"description": income.Description,
+		"received_at": income.ReceivedAt,
+	})
+	intent, err := s.intentRepo.Create(&entities.AssistantIntent{
+		UserID:       input.UserID,
+		MessageLogID: input.MessageLogID,
+		Intent:       "create_income",
+		Confidence:   0.9,
+		Entities:     entitiesJSON,
+		Status:       "completed",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &types.AssistantMessageResult{
+		Intent:    intent.Intent,
+		ReplyText: fmt.Sprintf("บันทึก%s %.2f บาทแล้วครับ", income.Description, income.Amount),
+		Data:      income,
 	}, nil
 }
 
@@ -258,6 +320,101 @@ func (s *assistantService) handleExpenseReport(input types.AssistantMessageInput
 		Intent:    intent.Intent,
 		ReplyText: formatExpenseReportReply(period.Label, expenses, total, loc),
 		Data:      map[string]any{"expenses": expenses, "total": total, "start": period.Start, "end": period.End},
+	}, nil
+}
+
+func (s *assistantService) handleIncomeReport(input types.AssistantMessageInput, now time.Time, loc *time.Location, period expenseReportPeriod) (*types.AssistantMessageResult, error) {
+	incomes, err := s.incomeRepo.ListByReceivedAtBetween(input.UserID, period.Start, period.End)
+	if err != nil {
+		return nil, err
+	}
+
+	total := 0.0
+	for _, income := range incomes {
+		total += income.Amount
+	}
+
+	entitiesJSON := marshalEntities(map[string]any{
+		"start": period.Start,
+		"end":   period.End,
+		"total": total,
+		"count": len(incomes),
+	})
+	intent, err := s.intentRepo.Create(&entities.AssistantIntent{
+		UserID:       input.UserID,
+		MessageLogID: input.MessageLogID,
+		Intent:       period.Intent,
+		Confidence:   0.92,
+		Entities:     entitiesJSON,
+		Status:       "completed",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &types.AssistantMessageResult{
+		Intent:    intent.Intent,
+		ReplyText: formatIncomeReportReply(period.Label, incomes, total, loc),
+		Data:      map[string]any{"incomes": incomes, "total": total, "start": period.Start, "end": period.End},
+	}, nil
+}
+
+func (s *assistantService) handleCashflowReport(input types.AssistantMessageInput, now time.Time, loc *time.Location, period expenseReportPeriod) (*types.AssistantMessageResult, error) {
+	incomes, err := s.incomeRepo.ListByReceivedAtBetween(input.UserID, period.Start, period.End)
+	if err != nil {
+		return nil, err
+	}
+	expenses, err := s.expenseRepo.ListBySpentAtBetween(input.UserID, period.Start, period.End)
+	if err != nil {
+		return nil, err
+	}
+
+	incomeTotal := 0.0
+	for _, income := range incomes {
+		incomeTotal += income.Amount
+	}
+	expenseTotal := 0.0
+	for _, expense := range expenses {
+		expenseTotal += expense.Amount
+	}
+
+	entitiesJSON := marshalEntities(map[string]any{
+		"start":         period.Start,
+		"end":           period.End,
+		"income_total":  incomeTotal,
+		"expense_total": expenseTotal,
+		"net":           incomeTotal - expenseTotal,
+		"income_count":  len(incomes),
+		"expense_count": len(expenses),
+	})
+	intent, err := s.intentRepo.Create(&entities.AssistantIntent{
+		UserID:       input.UserID,
+		MessageLogID: input.MessageLogID,
+		Intent:       period.Intent,
+		Confidence:   0.92,
+		Entities:     entitiesJSON,
+		Status:       "completed",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &types.AssistantMessageResult{
+		Intent:    intent.Intent,
+		ReplyText: formatCashflowReportReply(period.Label, incomeTotal, expenseTotal),
+		Data: map[string]any{
+			"incomes":       incomes,
+			"expenses":      expenses,
+			"income_total":  incomeTotal,
+			"expense_total": expenseTotal,
+			"net":           incomeTotal - expenseTotal,
+			"start":         period.Start,
+			"end":           period.End,
+		},
 	}, nil
 }
 
@@ -560,60 +717,111 @@ func isExpenseSummary(text string) bool {
 	return strings.Contains(text, "ใช้เงิน") && (strings.Contains(text, "เดือน") || strings.Contains(text, "เท่าไหร่"))
 }
 
+type moneyReportTarget string
+
+const (
+	moneyReportTargetExpense  moneyReportTarget = "expense"
+	moneyReportTargetIncome   moneyReportTarget = "income"
+	moneyReportTargetCashflow moneyReportTarget = "cashflow"
+)
+
+type reportPeriodKind string
+
+const (
+	reportPeriodDaily   reportPeriodKind = "daily"
+	reportPeriodWeekly  reportPeriodKind = "weekly"
+	reportPeriodMonthly reportPeriodKind = "monthly"
+)
+
 func parseExpenseReportPeriod(text string, now time.Time, loc *time.Location) (expenseReportPeriod, bool) {
-	if !isExpenseReportQuery(text) {
+	target, period, ok := parseMoneyReportRequest(text, now, loc)
+	if !ok || target != moneyReportTargetExpense {
 		return expenseReportPeriod{}, false
 	}
+	return period, true
+}
 
+func parseMoneyReportRequest(text string, now time.Time, loc *time.Location) (moneyReportTarget, expenseReportPeriod, bool) {
+	target, ok := detectMoneyReportTarget(text)
+	if !ok || !containsAny(text, moneyReportQueryWords()) {
+		return "", expenseReportPeriod{}, false
+	}
+	if _, hasAmount := extractAmount(text); hasAmount && !containsAny(text, strongMoneyReportQueryWords()) {
+		return "", expenseReportPeriod{}, false
+	}
+
+	period, kind := parseReportPeriod(text, now, loc)
+	period.Intent = fmt.Sprintf("%s_report_%s", target, kind)
+	return target, period, true
+}
+
+func detectMoneyReportTarget(text string) (moneyReportTarget, bool) {
+	hasIncome := containsAny(text, incomeWords())
+	hasExpense := containsAny(text, expenseWords())
+	hasCashflow := containsAny(text, cashflowWords()) || (hasIncome && hasExpense)
+
+	switch {
+	case hasCashflow:
+		return moneyReportTargetCashflow, true
+	case hasIncome:
+		return moneyReportTargetIncome, true
+	case hasExpense:
+		return moneyReportTargetExpense, true
+	default:
+		return "", false
+	}
+}
+
+func parseReportPeriod(text string, now time.Time, loc *time.Location) (expenseReportPeriod, reportPeriodKind) {
 	current := now.In(loc)
-	if strings.Contains(text, "สัปดาห์") || strings.Contains(text, "อาทิตย์นี้") {
-		daysSinceMonday := int(current.Weekday()) - int(time.Monday)
-		if daysSinceMonday < 0 {
-			daysSinceMonday += 7
+	referenceDate, hasReferenceDate := parseReportReferenceDate(text, current, loc)
+	if strings.Contains(strings.ToLower(text), "week") || strings.Contains(text, "สัปดาห์") || strings.Contains(text, "อาทิตย์") {
+		reference := current
+		if hasReferenceDate {
+			reference = referenceDate
 		}
-		startDate := current.AddDate(0, 0, -daysSinceMonday)
-		start := time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 0, 0, 0, 0, loc)
+		start := startOfReportWeek(reference, loc)
 		return expenseReportPeriod{
-			Label:  "สัปดาห์นี้",
-			Start:  start,
-			End:    start.AddDate(0, 0, 7),
-			Intent: "expense_report_weekly",
-		}, true
+			Label: formatReportPeriodLabel("สัปดาห์", start, start.AddDate(0, 0, 7), loc),
+			Start: start,
+			End:   start.AddDate(0, 0, 7),
+		}, reportPeriodWeekly
 	}
 
-	if strings.Contains(text, "เดือน") {
+	if strings.Contains(strings.ToLower(text), "month") || strings.Contains(text, "เดือน") || (containsThaiMonthName(text) && !hasReferenceDate) {
 		start := time.Date(current.Year(), current.Month(), 1, 0, 0, 0, 0, loc)
+		if parsed, ok := parseReportMonth(text, current, loc); ok {
+			start = parsed
+		} else if hasReferenceDate {
+			start = time.Date(referenceDate.Year(), referenceDate.Month(), 1, 0, 0, 0, 0, loc)
+		}
 		return expenseReportPeriod{
-			Label:  "เดือนนี้",
-			Start:  start,
-			End:    start.AddDate(0, 1, 0),
-			Intent: "expense_report_monthly",
-		}, true
+			Label: formatReportPeriodLabel("เดือน", start, start.AddDate(0, 1, 0), loc),
+			Start: start,
+			End:   start.AddDate(0, 1, 0),
+		}, reportPeriodMonthly
 	}
 
-	start := time.Date(current.Year(), current.Month(), current.Day(), 0, 0, 0, 0, loc)
+	reference := current
+	if hasReferenceDate {
+		reference = referenceDate
+	}
+	start := time.Date(reference.Year(), reference.Month(), reference.Day(), 0, 0, 0, 0, loc)
 	return expenseReportPeriod{
-		Label:  "วันนี้",
-		Start:  start,
-		End:    start.AddDate(0, 0, 1),
-		Intent: "expense_report_daily",
-	}, true
+		Label: formatReportPeriodLabel("วันที่", start, start.AddDate(0, 0, 1), loc),
+		Start: start,
+		End:   start.AddDate(0, 0, 1),
+	}, reportPeriodDaily
 }
 
 func isExpenseReportQuery(text string) bool {
-	if _, hasAmount := extractAmount(text); hasAmount {
-		return false
-	}
-
-	moneyWords := []string{"ใช้เงิน", "รายจ่าย", "ค่าใช้จ่าย", "จ่าย", "ซื้อ", "กิน", "อาหาร", "expense"}
-	queryWords := []string{"อะไร", "บ้าง", "เท่าไหร่", "เท่าไร", "รวม", "สรุป", "รายการ", "ดู", "เช็ค", "เช็ก", "ย้อนหลัง"}
-	return containsAny(text, moneyWords) && containsAny(text, queryWords)
+	_, _, ok := parseMoneyReportRequest(text, time.Now(), time.Local)
+	return ok && containsAny(text, expenseWords())
 }
 
 func isIncomeReportQuery(text string) bool {
-	incomeWords := []string{"รายรับ", "รับเงิน", "ได้เงิน", "income"}
-	queryWords := []string{"อะไร", "บ้าง", "เท่าไหร่", "เท่าไร", "รวม", "สรุป", "รายการ", "ดู", "เช็ค", "เช็ก"}
-	return containsAny(text, incomeWords) && containsAny(text, queryWords)
+	_, _, ok := parseMoneyReportRequest(text, time.Now(), time.Local)
+	return ok && containsAny(text, incomeWords())
 }
 
 func isTomorrowSummary(text string) bool {
@@ -630,6 +838,9 @@ func isNoteCommand(text string) bool {
 }
 
 func looksLikeExpense(text string) bool {
+	if looksLikeIncome(text) {
+		return false
+	}
 	keywords := []string{"บาท", "กิน", "ซื้อ", "จ่าย", "ค่า", "โอน", "กาแฟ", "ข้าว", "อาหาร"}
 	for _, keyword := range keywords {
 		if strings.Contains(text, keyword) {
@@ -639,8 +850,39 @@ func looksLikeExpense(text string) bool {
 	return false
 }
 
+func looksLikeIncome(text string) bool {
+	return containsAny(text, incomeCreateWords())
+}
+
+func expenseWords() []string {
+	return []string{"ใช้เงิน", "รายจ่าย", "ค่าใช้จ่าย", "จ่าย", "ซื้อ", "กิน", "อาหาร", "expense", "spent", "spend"}
+}
+
+func incomeWords() []string {
+	return []string{"รายรับ", "รับเงิน", "ได้เงิน", "รายได้", "เงินเข้า", "income", "salary"}
+}
+
+func incomeCreateWords() []string {
+	return []string{"รายรับ", "รับเงิน", "ได้เงิน", "ได้รับเงิน", "รายได้", "เงินเข้า", "เงินเดือน", "ขายได้", "income", "salary"}
+}
+
+func cashflowWords() []string {
+	return []string{"รายรับรายจ่าย", "รายรับและรายจ่าย", "รายรับ รายจ่าย", "เงินเข้าเงินออก", "สรุปการเงิน", "การเงิน", "สุทธิ", "คงเหลือ", "cashflow", "cash flow", "balance", "net"}
+}
+
+func moneyReportQueryWords() []string {
+	return []string{"อะไร", "บ้าง", "เท่าไหร่", "เท่าไร", "รวม", "สรุป", "รายการ", "ดู", "เช็ค", "เช็ก", "ย้อนหลัง", "วันนี้", "เมื่อวาน", "สัปดาห์", "อาทิตย์", "เดือน", "summary", "report", "list", "total", "today", "yesterday", "week", "month"}
+}
+
+func strongMoneyReportQueryWords() []string {
+	return []string{"อะไร", "บ้าง", "เท่าไหร่", "เท่าไร", "รวม", "สรุป", "รายการ", "ดู", "เช็ค", "เช็ก", "ย้อนหลัง", "summary", "report", "list", "total"}
+}
+
 func looksLikeCalendarEvent(text string) bool {
 	if isQuestion(text) || isCalendarCancelCommand(text) {
+		return false
+	}
+	if !hasExplicitTime(text) {
 		return false
 	}
 
@@ -653,24 +895,313 @@ func looksLikeCalendarEvent(text string) bool {
 	}
 
 	eventWords := []string{"ประชุม", "นัด", "เจอ", "คุย", "โทรหา", "call", "meeting"}
-	hasDateOrTime := strings.Contains(text, "วันนี้") ||
-		strings.Contains(text, "พรุ่งนี้") ||
-		strings.Contains(text, "โมง") ||
-		strings.Contains(text, ":")
-	return containsAny(text, eventWords) && hasDateOrTime
+	return containsAny(text, eventWords)
+}
+
+func looksLikeCalendarIntentWithoutTime(text string) bool {
+	if isQuestion(text) || isCalendarCancelCommand(text) || hasExplicitTime(text) {
+		return false
+	}
+
+	calendarPrefixes := []string{
+		"นัด", "เพิ่มนัด", "ลงนัด", "บันทึกนัด", "สร้างนัด",
+		"เพิ่มตาราง", "ลงตาราง", "บันทึกตาราง", "เพิ่ม calendar", "calendar",
+	}
+	eventWords := []string{"ประชุม", "นัด", "เจอ", "คุย", "โทรหา", "meeting"}
+	return hasPrefixAny(strings.TrimSpace(text), calendarPrefixes) || containsAny(text, eventWords)
+}
+
+func hasExplicitTime(text string) bool {
+	_, _, ok := extractHourMinute(text)
+	return ok
 }
 
 func extractAmount(text string) (float64, bool) {
-	re := regexp.MustCompile(`([0-9]+(?:\.[0-9]+)?)`)
-	match := re.FindStringSubmatch(text)
-	if len(match) < 2 {
+	withCurrency := regexp.MustCompile(`([0-9]+(?:\.[0-9]+)?)\s*(บาท|บ|thb|THB)`)
+	if match := withCurrency.FindStringSubmatch(text); len(match) >= 2 {
+		amount, err := strconv.ParseFloat(match[1], 64)
+		if err == nil {
+			return amount, true
+		}
+	}
+
+	re := regexp.MustCompile(`[0-9]+(?:\.[0-9]+)?`)
+	matches := re.FindAllStringIndex(text, -1)
+	for _, match := range matches {
+		raw := text[match[0]:match[1]]
+		amount, err := strconv.ParseFloat(raw, 64)
+		if err != nil {
+			continue
+		}
+		if amount > 31 && !looksLikeDateNumber(text, match[0], match[1]) {
+			return amount, true
+		}
+	}
+	if len(matches) == 0 {
 		return 0, false
 	}
-	amount, err := strconv.ParseFloat(match[1], 64)
+	raw := text[matches[0][0]:matches[0][1]]
+	amount, err := strconv.ParseFloat(raw, 64)
 	if err != nil {
 		return 0, false
 	}
 	return amount, true
+}
+
+func looksLikeDateNumber(text string, start, end int) bool {
+	before := text[:start]
+	after := text[end:]
+	if strings.HasSuffix(before, "วันที่ ") || strings.HasSuffix(before, "วันที่") {
+		return true
+	}
+	if strings.HasPrefix(after, "/") || strings.HasPrefix(after, "-") {
+		return true
+	}
+	if strings.HasSuffix(before, "/") || strings.HasSuffix(before, "-") {
+		return true
+	}
+	return false
+}
+
+func parseMoneyEntryTime(text string, now time.Time, loc *time.Location) time.Time {
+	current := now.In(loc)
+	if date, ok := parseReportReferenceDate(text, current, loc); ok {
+		return time.Date(date.Year(), date.Month(), date.Day(), current.Hour(), current.Minute(), current.Second(), current.Nanosecond(), loc)
+	}
+	return current
+}
+
+func parseReportReferenceDate(text string, current time.Time, loc *time.Location) (time.Time, bool) {
+	lower := strings.ToLower(text)
+	if strings.Contains(text, "วันนี้") || strings.Contains(lower, "today") {
+		return time.Date(current.Year(), current.Month(), current.Day(), 0, 0, 0, 0, loc), true
+	}
+	if strings.Contains(text, "เมื่อวาน") || strings.Contains(lower, "yesterday") {
+		date := current.AddDate(0, 0, -1)
+		return time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, loc), true
+	}
+	if strings.Contains(text, "พรุ่งนี้") || strings.Contains(lower, "tomorrow") {
+		date := current.AddDate(0, 0, 1)
+		return time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, loc), true
+	}
+
+	if date, ok := parseISODateInText(text, loc); ok {
+		return date, true
+	}
+	if date, ok := parseSlashDateInText(text, current, loc); ok {
+		return date, true
+	}
+	if date, ok := parseThaiMonthDateInText(text, current, loc); ok {
+		return date, true
+	}
+	if date, ok := parseDayOnlyInText(text, current, loc); ok {
+		return date, true
+	}
+	return time.Time{}, false
+}
+
+func parseISODateInText(text string, loc *time.Location) (time.Time, bool) {
+	re := regexp.MustCompile(`\b(\d{4})-(\d{1,2})-(\d{1,2})\b`)
+	match := re.FindStringSubmatch(text)
+	if len(match) != 4 {
+		return time.Time{}, false
+	}
+	year, _ := strconv.Atoi(match[1])
+	month, _ := strconv.Atoi(match[2])
+	day, _ := strconv.Atoi(match[3])
+	return buildDate(year, time.Month(month), day, loc)
+}
+
+func parseSlashDateInText(text string, current time.Time, loc *time.Location) (time.Time, bool) {
+	re := regexp.MustCompile(`\b(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?\b`)
+	match := re.FindStringSubmatch(text)
+	if len(match) < 3 {
+		return time.Time{}, false
+	}
+	day, _ := strconv.Atoi(match[1])
+	month, _ := strconv.Atoi(match[2])
+	year := current.Year()
+	if len(match) >= 4 && match[3] != "" {
+		year, _ = strconv.Atoi(match[3])
+		year = normalizeYear(year)
+	}
+	return buildDate(year, time.Month(month), day, loc)
+}
+
+func parseThaiMonthDateInText(text string, current time.Time, loc *time.Location) (time.Time, bool) {
+	monthPattern := thaiMonthPattern()
+	re := regexp.MustCompile(`(?i)(\d{1,2})\s*(` + monthPattern + `)(?:\s*(\d{2,4}))?`)
+	match := re.FindStringSubmatch(text)
+	if len(match) < 3 {
+		return time.Time{}, false
+	}
+	day, _ := strconv.Atoi(match[1])
+	month, ok := thaiMonthNumber(match[2])
+	if !ok {
+		return time.Time{}, false
+	}
+	year := current.Year()
+	if len(match) >= 4 && match[3] != "" {
+		year, _ = strconv.Atoi(match[3])
+		year = normalizeYear(year)
+	}
+	return buildDate(year, month, day, loc)
+}
+
+func parseDayOnlyInText(text string, current time.Time, loc *time.Location) (time.Time, bool) {
+	re := regexp.MustCompile(`วันที่\s*(\d{1,2})`)
+	match := re.FindStringSubmatch(text)
+	if len(match) != 2 {
+		return time.Time{}, false
+	}
+	day, _ := strconv.Atoi(match[1])
+	return buildDate(current.Year(), current.Month(), day, loc)
+}
+
+func parseReportMonth(text string, current time.Time, loc *time.Location) (time.Time, bool) {
+	if start, ok := parseISOMonthInText(text, loc); ok {
+		return start, true
+	}
+
+	monthPattern := thaiMonthPattern()
+	re := regexp.MustCompile(`(?i)(` + monthPattern + `)(?:\s*(\d{2,4}))?`)
+	match := re.FindStringSubmatch(text)
+	if len(match) >= 2 {
+		month, ok := thaiMonthNumber(match[1])
+		if ok {
+			year := current.Year()
+			if len(match) >= 3 && match[2] != "" {
+				year, _ = strconv.Atoi(match[2])
+				year = normalizeYear(year)
+			}
+			return time.Date(year, month, 1, 0, 0, 0, 0, loc), true
+		}
+	}
+
+	numberMonth := regexp.MustCompile(`เดือน\s*(\d{1,2})(?:[/-](\d{2,4}))?`)
+	match = numberMonth.FindStringSubmatch(text)
+	if len(match) >= 2 {
+		monthNumber, _ := strconv.Atoi(match[1])
+		year := current.Year()
+		if len(match) >= 3 && match[2] != "" {
+			year, _ = strconv.Atoi(match[2])
+			year = normalizeYear(year)
+		}
+		if monthNumber >= 1 && monthNumber <= 12 {
+			return time.Date(year, time.Month(monthNumber), 1, 0, 0, 0, 0, loc), true
+		}
+	}
+
+	return time.Time{}, false
+}
+
+func parseISOMonthInText(text string, loc *time.Location) (time.Time, bool) {
+	re := regexp.MustCompile(`\b(\d{4})-(\d{1,2})\b`)
+	match := re.FindStringSubmatch(text)
+	if len(match) != 3 {
+		return time.Time{}, false
+	}
+	year, _ := strconv.Atoi(match[1])
+	month, _ := strconv.Atoi(match[2])
+	if month < 1 || month > 12 {
+		return time.Time{}, false
+	}
+	return time.Date(year, time.Month(month), 1, 0, 0, 0, 0, loc), true
+}
+
+func buildDate(year int, month time.Month, day int, loc *time.Location) (time.Time, bool) {
+	year = normalizeYear(year)
+	if month < time.January || month > time.December || day < 1 || day > 31 {
+		return time.Time{}, false
+	}
+	date := time.Date(year, month, day, 0, 0, 0, 0, loc)
+	if date.Year() != year || date.Month() != month || date.Day() != day {
+		return time.Time{}, false
+	}
+	return date, true
+}
+
+func normalizeYear(year int) int {
+	if year < 100 {
+		return 2000 + year
+	}
+	if year > 2400 {
+		return year - 543
+	}
+	return year
+}
+
+func containsThaiMonthName(text string) bool {
+	for name := range thaiMonthMap() {
+		if strings.Contains(strings.ToLower(text), strings.ToLower(name)) {
+			return true
+		}
+	}
+	return false
+}
+
+func thaiMonthPattern() string {
+	return strings.Join([]string{
+		"มกราคม", "ม\\.ค\\.?", "jan", "january",
+		"กุมภาพันธ์", "ก\\.พ\\.?", "feb", "february",
+		"มีนาคม", "มี\\.ค\\.?", "mar", "march",
+		"เมษายน", "เม\\.ย\\.?", "apr", "april",
+		"พฤษภาคม", "พ\\.ค\\.?", "may",
+		"มิถุนายน", "มิ\\.ย\\.?", "jun", "june",
+		"กรกฎาคม", "ก\\.ค\\.?", "jul", "july",
+		"สิงหาคม", "ส\\.ค\\.?", "aug", "august",
+		"กันยายน", "ก\\.ย\\.?", "sep", "september",
+		"ตุลาคม", "ต\\.ค\\.?", "oct", "october",
+		"พฤศจิกายน", "พ\\.ย\\.?", "nov", "november",
+		"ธันวาคม", "ธ\\.ค\\.?", "dec", "december",
+	}, "|")
+}
+
+func thaiMonthNumber(value string) (time.Month, bool) {
+	normalized := strings.ToLower(strings.TrimSpace(strings.TrimSuffix(value, ".")))
+	normalized = strings.ReplaceAll(normalized, ".", "")
+	month, ok := thaiMonthMap()[normalized]
+	return month, ok
+}
+
+func thaiMonthMap() map[string]time.Month {
+	return map[string]time.Month{
+		"มกราคม": time.January, "มค": time.January, "jan": time.January, "january": time.January,
+		"กุมภาพันธ์": time.February, "กพ": time.February, "feb": time.February, "february": time.February,
+		"มีนาคม": time.March, "มีค": time.March, "mar": time.March, "march": time.March,
+		"เมษายน": time.April, "เมย": time.April, "apr": time.April, "april": time.April,
+		"พฤษภาคม": time.May, "พค": time.May, "may": time.May,
+		"มิถุนายน": time.June, "มิย": time.June, "jun": time.June, "june": time.June,
+		"กรกฎาคม": time.July, "กค": time.July, "jul": time.July, "july": time.July,
+		"สิงหาคม": time.August, "สค": time.August, "aug": time.August, "august": time.August,
+		"กันยายน": time.September, "กย": time.September, "sep": time.September, "september": time.September,
+		"ตุลาคม": time.October, "ตค": time.October, "oct": time.October, "october": time.October,
+		"พฤศจิกายน": time.November, "พย": time.November, "nov": time.November, "november": time.November,
+		"ธันวาคม": time.December, "ธค": time.December, "dec": time.December, "december": time.December,
+	}
+}
+
+func startOfReportWeek(date time.Time, loc *time.Location) time.Time {
+	current := date.In(loc)
+	daysSinceMonday := int(current.Weekday()) - int(time.Monday)
+	if daysSinceMonday < 0 {
+		daysSinceMonday += 7
+	}
+	startDate := current.AddDate(0, 0, -daysSinceMonday)
+	return time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 0, 0, 0, 0, loc)
+}
+
+func formatReportPeriodLabel(prefix string, start, end time.Time, loc *time.Location) string {
+	switch prefix {
+	case "วันที่":
+		return "วันที่ " + start.In(loc).Format("02 Jan 2006")
+	case "สัปดาห์":
+		return fmt.Sprintf("สัปดาห์ %s-%s", start.In(loc).Format("02 Jan"), end.Add(-time.Nanosecond).In(loc).Format("02 Jan 2006"))
+	case "เดือน":
+		return "เดือน " + start.In(loc).Format("Jan 2006")
+	default:
+		return prefix
+	}
 }
 
 func inferExpenseCategory(text string) string {
@@ -683,11 +1214,35 @@ func inferExpenseCategory(text string) string {
 	return "uncategorized"
 }
 
+func inferIncomeCategory(text string) string {
+	lower := strings.ToLower(text)
+	if strings.Contains(text, "เงินเดือน") || strings.Contains(lower, "salary") {
+		return "salary"
+	}
+	if strings.Contains(text, "ขาย") {
+		return "sales"
+	}
+	if strings.Contains(text, "ดอกเบี้ย") || strings.Contains(text, "ปันผล") || strings.Contains(lower, "dividend") {
+		return "investment"
+	}
+	return "uncategorized"
+}
+
 func cleanupExpenseDescription(text string) string {
 	re := regexp.MustCompile(`[0-9]+(?:\.[0-9]+)?\s*(บาท|บ|thb|THB)?`)
 	cleaned := strings.TrimSpace(re.ReplaceAllString(text, ""))
 	if cleaned == "" {
 		return "รายจ่าย"
+	}
+	return cleaned
+}
+
+func cleanupIncomeDescription(text string) string {
+	re := regexp.MustCompile(`[0-9]+(?:\.[0-9]+)?\s*(บาท|บ|thb|THB)?`)
+	cleaned := strings.TrimSpace(re.ReplaceAllString(text, ""))
+	cleaned = cleanupByRemoving(cleaned, []string{"บันทึก", "เพิ่ม", "รายรับ", "รับเงิน", "ได้เงิน", "ได้รับเงิน", "เงินเข้า", "income", "Income"})
+	if cleaned == "" {
+		return "รายรับ"
 	}
 	return cleaned
 }
@@ -806,6 +1361,12 @@ func extractHourMinute(text string) (int, int, bool) {
 		return normalizeThaiHour(text, hour), 0, true
 	}
 
+	thaiShortClock := regexp.MustCompile(`(\d{1,2})\s*น\.?`)
+	if match := thaiShortClock.FindStringSubmatch(text); len(match) == 2 {
+		hour, _ := strconv.Atoi(match[1])
+		return normalizeThaiHour(text, hour), 0, true
+	}
+
 	return 0, 0, false
 }
 
@@ -918,6 +1479,38 @@ func formatExpenseReportReply(label string, expenses []*entities.Expense, total 
 	}
 
 	return strings.Join(lines, "\n")
+}
+
+func formatIncomeReportReply(label string, incomes []*entities.Income, total float64, loc *time.Location) string {
+	if len(incomes) == 0 {
+		return fmt.Sprintf("%sยังไม่มีรายรับที่บันทึกไว้ครับ", label)
+	}
+
+	lines := []string{fmt.Sprintf("รายการรายรับ%s รวม %.2f บาท", label, total)}
+	limit := len(incomes)
+	if limit > 10 {
+		limit = 10
+	}
+
+	for i := limit - 1; i >= 0; i-- {
+		income := incomes[i]
+		lines = append(lines, fmt.Sprintf("- %s %s %.2f บาท", income.ReceivedAt.In(loc).Format("15:04"), income.Description, income.Amount))
+	}
+	if len(incomes) > limit {
+		lines = append(lines, fmt.Sprintf("และอีก %d รายการครับ", len(incomes)-limit))
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+func formatCashflowReportReply(label string, incomeTotal, expenseTotal float64) string {
+	net := incomeTotal - expenseTotal
+	return strings.Join([]string{
+		fmt.Sprintf("สรุปการเงิน%s", label),
+		fmt.Sprintf("- รายรับ %.2f บาท", incomeTotal),
+		fmt.Sprintf("- รายจ่าย %.2f บาท", expenseTotal),
+		fmt.Sprintf("- สุทธิ %.2f บาท", net),
+	}, "\n")
 }
 
 func isQuestion(text string) bool {

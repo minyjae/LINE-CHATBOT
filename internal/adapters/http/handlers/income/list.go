@@ -1,4 +1,4 @@
-package expense
+package income
 
 import (
 	"time"
@@ -8,20 +8,20 @@ import (
 	"minyjae/go-starter/utils"
 )
 
-func (h *expenseController) List(c *fiber.Ctx) error {
+func (h *incomeController) List(c *fiber.Ctx) error {
 	userID, ok := utils.UserIDFromLocals(c)
 	if !ok {
 		return h.Response.Unauthorized(c, "Unauthorized", "UNAUTHORIZED")
 	}
 
-	expenses, err := h.expenseService.List(userID, c.QueryInt("limit", 50), c.QueryInt("offset", 0))
+	incomes, err := h.incomeService.List(userID, c.QueryInt("limit", 50), c.QueryInt("offset", 0))
 	if err != nil {
-		return h.Response.InternalServerError(c, "Failed to list expenses", err.Error(), "LIST_EXPENSES_FAILED")
+		return h.Response.InternalServerError(c, "Failed to list incomes", err.Error(), "LIST_INCOMES_FAILED")
 	}
-	return h.Response.Item(c, "Expenses fetched", expenses)
+	return h.Response.Item(c, "Incomes fetched", incomes)
 }
 
-func (h *expenseController) Summary(c *fiber.Ctx) error {
+func (h *incomeController) Summary(c *fiber.Ctx) error {
 	userID, ok := utils.UserIDFromLocals(c)
 	if !ok {
 		return h.Response.Unauthorized(c, "Unauthorized", "UNAUTHORIZED")
@@ -32,9 +32,9 @@ func (h *expenseController) Summary(c *fiber.Ctx) error {
 		return h.Response.BadRequest(c, "Invalid period. Use period=day|week|month with date=YYYY-MM-DD or month=YYYY-MM", "INVALID_PERIOD")
 	}
 
-	summary, err := h.expenseService.SummaryByPeriod(userID, period.Start, period.End)
+	summary, err := h.incomeService.SummaryByPeriod(userID, period.Start, period.End)
 	if err != nil {
-		return h.Response.InternalServerError(c, "Failed to summarize expenses", err.Error(), "EXPENSE_SUMMARY_FAILED")
+		return h.Response.InternalServerError(c, "Failed to summarize incomes", err.Error(), "INCOME_SUMMARY_FAILED")
 	}
-	return h.Response.Item(c, "Expense summary fetched", summary)
+	return h.Response.Item(c, "Income summary fetched", summary)
 }

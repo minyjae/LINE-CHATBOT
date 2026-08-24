@@ -45,7 +45,7 @@ func (p *IntentParser) Parse(input types.IntentParseInput) (*types.ParsedAssista
 		"input": []map[string]string{
 			{
 				"role":    "system",
-				"content": "You classify Thai or English personal assistant messages. Return only JSON matching the schema. Use ISO 8601 timestamps with timezone when extracting dates. Supported intents: create_expense, expense_summary, expense_report_daily, expense_report_weekly, expense_report_monthly, create_todo, tomorrow_summary, create_reminder, create_note, create_calendar_event, cancel_calendar_event, unknown. Calendar events should require a clear scheduling intent such as นัด, เพิ่มนัด, ลงตาราง, ประชุม, meeting, or a person/event plus date/time. Messages such as ยกเลิกนัด, ลบนัด, cancel meeting, or cancel event should be cancel_calendar_event. Questions about what was bought, eaten, spent, or expense lists should be expense_report_* instead of calendar.",
+				"content": "You classify Thai or English personal assistant messages. Return only JSON matching the schema. Use ISO 8601 timestamps with timezone when extracting dates. Supported intents: create_expense, create_income, expense_summary, expense_report_daily, expense_report_weekly, expense_report_monthly, income_report_daily, income_report_weekly, income_report_monthly, cashflow_report_daily, cashflow_report_weekly, cashflow_report_monthly, create_todo, tomorrow_summary, create_reminder, create_note, create_calendar_event, cancel_calendar_event, unknown. Use expense intents for money spent, income intents for money received, and cashflow intents when the user asks for both income and expense, net, balance, or cash flow. Calendar events must include an explicit time in the user message, such as 10 โมง, 16:00, or 9 น. Do not infer or invent a time for calendar events. If a message sounds like a meeting or schedule item but has no explicit time, classify it as create_note or unknown instead of create_calendar_event. Messages such as ยกเลิกนัด, ลบนัด, cancel meeting, or cancel event should be cancel_calendar_event. Questions about what was bought, eaten, spent, or expense lists should be expense_report_* instead of calendar.",
 			},
 			{
 				"role":    "user",
@@ -138,6 +138,7 @@ func intentSchema() map[string]any {
 		"due_at":      map[string]any{"type": "string"},
 		"remind_at":   map[string]any{"type": "string"},
 		"spent_at":    map[string]any{"type": "string"},
+		"received_at": map[string]any{"type": "string"},
 		"location":    map[string]any{"type": "string"},
 		"priority":    map[string]any{"type": "string"},
 		"tags": map[string]any{
@@ -158,6 +159,7 @@ func intentSchema() map[string]any {
 		"due_at",
 		"remind_at",
 		"spent_at",
+		"received_at",
 		"location",
 		"priority",
 		"tags",
@@ -170,10 +172,17 @@ func intentSchema() map[string]any {
 				"type": "string",
 				"enum": []string{
 					"create_expense",
+					"create_income",
 					"expense_summary",
 					"expense_report_daily",
 					"expense_report_weekly",
 					"expense_report_monthly",
+					"income_report_daily",
+					"income_report_weekly",
+					"income_report_monthly",
+					"cashflow_report_daily",
+					"cashflow_report_weekly",
+					"cashflow_report_monthly",
 					"create_todo",
 					"tomorrow_summary",
 					"create_reminder",

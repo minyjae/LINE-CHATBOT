@@ -35,23 +35,26 @@ func (s *expenseService) List(userID uint, limit, offset int) ([]*entities.Expen
 	return s.repo.ListByUserID(userID, limit, offset)
 }
 
-func (s *expenseService) SummaryByMonth(userID uint, year int, month time.Month, loc *time.Location) (*servicePort.ExpenseSummary, error) {
-	if loc == nil {
-		loc = time.Local
-	}
-	start := time.Date(year, month, 1, 0, 0, 0, 0, loc)
-	end := start.AddDate(0, 1, 0)
+func (s *expenseService) SummaryByPeriod(userID uint, start, end time.Time) (*servicePort.ExpenseSummary, error) {
 	total, err := s.repo.SumBySpentAtBetween(userID, start, end)
 	if err != nil {
 		return nil, err
 	}
-
 	return &servicePort.ExpenseSummary{
 		Total:    total,
 		Currency: "THB",
 		Start:    start,
 		End:      end,
 	}, nil
+}
+
+func (s *expenseService) SummaryByMonth(userID uint, year int, month time.Month, loc *time.Location) (*servicePort.ExpenseSummary, error) {
+	if loc == nil {
+		loc = time.Local
+	}
+	start := time.Date(year, month, 1, 0, 0, 0, 0, loc)
+	end := start.AddDate(0, 1, 0)
+	return s.SummaryByPeriod(userID, start, end)
 }
 
 func (s *expenseService) Update(userID, id uint, expense *entities.Expense) (*entities.Expense, error) {

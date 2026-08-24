@@ -7,8 +7,9 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/gofiber/fiber/v2"
 	"minyjae/go-starter/types"
+
+	"github.com/gofiber/fiber/v2"
 )
 
 func (h *lineController) Webhook(c *fiber.Ctx) error {
@@ -30,6 +31,7 @@ func (h *lineController) Webhook(c *fiber.Ctx) error {
 			continue
 		}
 
+		// ถ้า event เป็น message หรือ text ก็จะ handleMassage ตาม text นั้นๆที่ส่งมา
 		result, err := h.lineWebhookService.HandleTextMessage(types.LineTextMessageInput{
 			LineUserID: event.Source.UserID,
 			ReplyToken: event.ReplyToken,
@@ -40,6 +42,7 @@ func (h *lineController) Webhook(c *fiber.Ctx) error {
 			return h.Response.InternalServerError(c, "Failed to handle LINE message", err.Error(), "LINE_WEBHOOK_FAILED")
 		}
 
+		// ตอบกลับข้อความไปยัง line
 		if err := h.lineMessenger.ReplyText(event.ReplyToken, result.ReplyText); err != nil {
 			return h.Response.InternalServerError(c, "Failed to reply LINE message", err.Error(), "LINE_REPLY_FAILED")
 		}

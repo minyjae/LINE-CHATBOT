@@ -32,6 +32,7 @@ func main() {
 	assistantIntentRepo := repositories.NewAssistantIntentRepository(db)
 	todoRepo := repositories.NewTodoRepository(db)
 	expenseRepo := repositories.NewExpenseRepository(db)
+	incomeRepo := repositories.NewIncomeRepository(db)
 	calendarEventRepo := repositories.NewCalendarEventRepository(db)
 	reminderRepo := repositories.NewReminderRepository(db)
 	noteRepo := repositories.NewNoteRepository(db)
@@ -41,6 +42,7 @@ func main() {
 		assistantIntentRepo,
 		todoRepo,
 		expenseRepo,
+		incomeRepo,
 		calendarEventRepo,
 		reminderRepo,
 		noteRepo,
@@ -54,6 +56,7 @@ func main() {
 	)
 	todoService := coreServices.NewTodoServiceImpl(todoRepo)
 	expenseService := coreServices.NewExpenseServiceImpl(expenseRepo)
+	incomeService := coreServices.NewIncomeServiceImpl(incomeRepo)
 	calendarEventService := coreServices.NewCalendarEventServiceImpl(calendarEventRepo)
 	reminderService := coreServices.NewReminderServiceImpl(reminderRepo)
 	noteService := coreServices.NewNoteServiceImpl(noteRepo)
@@ -92,6 +95,7 @@ func main() {
 		routes.DashboardServices{
 			Todo:          todoService,
 			Expense:       expenseService,
+			Income:        incomeService,
 			CalendarEvent: calendarEventService,
 			Reminder:      reminderService,
 			Note:          noteService,
