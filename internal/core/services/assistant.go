@@ -965,10 +965,26 @@ func looksLikeDateNumber(text string, start, end int) bool {
 
 func parseMoneyEntryTime(text string, now time.Time, loc *time.Location) time.Time {
 	current := now.In(loc)
+	hour, minute, hasTime := extractHourMinute(text)
 	if date, ok := parseReportReferenceDate(text, current, loc); ok {
+		if hasTime {
+			return time.Date(date.Year(), date.Month(), date.Day(), hour, minute, 0, 0, loc)
+		}
 		return time.Date(date.Year(), date.Month(), date.Day(), current.Hour(), current.Minute(), current.Second(), current.Nanosecond(), loc)
 	}
+	if hasTime {
+		return time.Date(current.Year(), current.Month(), current.Day(), hour, minute, 0, 0, loc)
+	}
 	return current
+}
+
+func mergeParsedMoneyTime(parsedAt time.Time, text string, loc *time.Location) time.Time {
+	parsedAt = parsedAt.In(loc)
+	hour, minute, hasTime := extractHourMinute(text)
+	if hasTime && parsedAt.Hour() == 0 && parsedAt.Minute() == 0 && parsedAt.Second() == 0 && parsedAt.Nanosecond() == 0 {
+		return time.Date(parsedAt.Year(), parsedAt.Month(), parsedAt.Day(), hour, minute, 0, 0, loc)
+	}
+	return parsedAt
 }
 
 func parseReportReferenceDate(text string, current time.Time, loc *time.Location) (time.Time, bool) {

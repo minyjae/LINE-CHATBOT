@@ -101,9 +101,9 @@ func (s *assistantService) handleParsedCreateExpense(input types.AssistantMessag
 		return nil, fmt.Errorf("parsed expense amount is missing")
 	}
 
-	spentAt := now
+	spentAt := parseMoneyEntryTime(text, now, loc)
 	if parsedAt, ok := parseOptionalIntentTime(parsed.Entities.SpentAt, loc); ok {
-		spentAt = parsedAt
+		spentAt = mergeParsedMoneyTime(parsedAt, text, loc)
 	}
 	description := firstNonEmpty(parsed.Entities.Description, parsed.Entities.Title, cleanupExpenseDescription(text))
 
@@ -137,11 +137,11 @@ func (s *assistantService) handleParsedCreateIncome(input types.AssistantMessage
 		return nil, fmt.Errorf("parsed income amount is missing")
 	}
 
-	receivedAt := now
+	receivedAt := parseMoneyEntryTime(text, now, loc)
 	if parsedAt, ok := parseOptionalIntentTime(parsed.Entities.ReceivedAt, loc); ok {
-		receivedAt = parsedAt
+		receivedAt = mergeParsedMoneyTime(parsedAt, text, loc)
 	} else if parsedAt, ok := parseOptionalIntentTime(parsed.Entities.SpentAt, loc); ok {
-		receivedAt = parsedAt
+		receivedAt = mergeParsedMoneyTime(parsedAt, text, loc)
 	}
 	description := firstNonEmpty(parsed.Entities.Description, parsed.Entities.Title, cleanupIncomeDescription(text))
 
