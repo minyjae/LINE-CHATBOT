@@ -105,7 +105,7 @@ func (s *assistantService) handleParsedCreateExpense(input types.AssistantMessag
 	if parsedAt, ok := parseOptionalIntentTime(parsed.Entities.SpentAt, loc); ok {
 		spentAt = mergeParsedMoneyTime(parsedAt, text, loc)
 	}
-	description := firstNonEmpty(parsed.Entities.Description, parsed.Entities.Title, cleanupExpenseDescription(text))
+	description := cleanupExpenseDescription(firstNonEmpty(parsed.Entities.Description, parsed.Entities.Title, text))
 
 	expense, err := s.expenseRepo.Create(&entities.Expense{
 		UserID:          input.UserID,
@@ -127,7 +127,7 @@ func (s *assistantService) handleParsedCreateExpense(input types.AssistantMessag
 
 	return &types.AssistantMessageResult{
 		Intent:    parsed.Intent,
-		ReplyText: fmt.Sprintf("Recorded %s %.2f %s.", expense.Description, expense.Amount, expense.Currency),
+		ReplyText: formatMoneyCreateReply(expense.Description, expense.Amount, expense.SpentAt, loc, hasExplicitMoneyEntryTime(text)),
 		Data:      expense,
 	}, nil
 }
@@ -143,7 +143,7 @@ func (s *assistantService) handleParsedCreateIncome(input types.AssistantMessage
 	} else if parsedAt, ok := parseOptionalIntentTime(parsed.Entities.SpentAt, loc); ok {
 		receivedAt = mergeParsedMoneyTime(parsedAt, text, loc)
 	}
-	description := firstNonEmpty(parsed.Entities.Description, parsed.Entities.Title, cleanupIncomeDescription(text))
+	description := cleanupIncomeDescription(firstNonEmpty(parsed.Entities.Description, parsed.Entities.Title, text))
 
 	income, err := s.incomeRepo.Create(&entities.Income{
 		UserID:          input.UserID,
@@ -165,7 +165,7 @@ func (s *assistantService) handleParsedCreateIncome(input types.AssistantMessage
 
 	return &types.AssistantMessageResult{
 		Intent:    parsed.Intent,
-		ReplyText: fmt.Sprintf("Recorded %s %.2f %s.", income.Description, income.Amount, income.Currency),
+		ReplyText: formatMoneyCreateReply(income.Description, income.Amount, income.ReceivedAt, loc, hasExplicitMoneyEntryTime(text)),
 		Data:      income,
 	}, nil
 }
