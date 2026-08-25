@@ -10,6 +10,9 @@ import (
 	"minyjae/go-starter/utils"
 )
 
+// calendarEventRequest คือ payload สำหรับสร้างหรือแก้ไข calendar event
+// input: JSON body จาก HTTP request
+// output: struct ที่ controller แปลงต่อเป็น entities.CalendarEvent
 type calendarEventRequest struct {
 	Title       string     `json:"title"`
 	Description *string    `json:"description"`
@@ -19,6 +22,9 @@ type calendarEventRequest struct {
 	SyncStatus  string     `json:"sync_status"`
 }
 
+// Create รับ HTTP request เพื่อสร้าง calendar event
+// input: Fiber context ที่มี userID ใน locals และ JSON body calendarEventRequest
+// output: HTTP created response พร้อม event ที่สร้าง หรือ error response
 func (h *calendarController) Create(c *fiber.Ctx) error {
 	userID, ok := utils.UserIDFromLocals(c)
 	if !ok {
@@ -47,6 +53,9 @@ func (h *calendarController) Create(c *fiber.Ctx) error {
 	return h.Response.Created(c, "Calendar event created", event)
 }
 
+// Update รับ HTTP request เพื่อแก้ไข calendar event
+// input: Fiber context ที่มี userID ใน locals, path id, และ JSON body calendarEventRequest
+// output: HTTP updated response พร้อม event ที่แก้ หรือ error response
 func (h *calendarController) Update(c *fiber.Ctx) error {
 	userID, ok := utils.UserIDFromLocals(c)
 	if !ok {
@@ -82,6 +91,9 @@ func (h *calendarController) Update(c *fiber.Ctx) error {
 	return h.Response.Updated(c, "Calendar event updated", event)
 }
 
+// Delete รับ HTTP request เพื่อลบ calendar event
+// input: Fiber context ที่มี userID ใน locals และ path id
+// output: HTTP deleted response หรือ error response
 func (h *calendarController) Delete(c *fiber.Ctx) error {
 	userID, ok := utils.UserIDFromLocals(c)
 	if !ok {

@@ -8,6 +8,9 @@ import (
 	"minyjae/go-starter/utils"
 )
 
+// List ดึงรายรับของ user แบบแบ่งหน้า
+// input: Fiber context ที่มี userID ใน locals และ query limit/offset
+// output: HTTP response รายการรายรับ หรือ error response
 func (h *incomeController) List(c *fiber.Ctx) error {
 	userID, ok := utils.UserIDFromLocals(c)
 	if !ok {
@@ -21,6 +24,9 @@ func (h *incomeController) List(c *fiber.Ctx) error {
 	return h.Response.Item(c, "Incomes fetched", incomes)
 }
 
+// Summary ดึงสรุปรายรับตาม period/date/month จาก query string
+// input: Fiber context ที่มี userID ใน locals และ query period/date/month
+// output: HTTP response IncomeSummary หรือ error response
 func (h *incomeController) Summary(c *fiber.Ctx) error {
 	userID, ok := utils.UserIDFromLocals(c)
 	if !ok {

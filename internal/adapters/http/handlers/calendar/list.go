@@ -7,6 +7,9 @@ import (
 	"minyjae/go-starter/utils"
 )
 
+// List ดึง calendar event ทั้งหมดของ user แบบแบ่งหน้า
+// input: Fiber context ที่มี userID ใน locals และ query limit/offset
+// output: HTTP response รายการ calendar event หรือ error response
 func (h *calendarController) List(c *fiber.Ctx) error {
 	userID, ok := utils.UserIDFromLocals(c)
 	if !ok {
@@ -20,6 +23,9 @@ func (h *calendarController) List(c *fiber.Ctx) error {
 	return h.Response.Item(c, "Calendar events fetched", events)
 }
 
+// ListByDate ดึง calendar event ของ user เฉพาะวันที่ระบุ
+// input: Fiber context ที่มี userID ใน locals และ query date รูปแบบ YYYY-MM-DD
+// output: HTTP response รายการ calendar event ของวันนั้น หรือ error response
 func (h *calendarController) ListByDate(c *fiber.Ctx) error {
 	userID, ok := utils.UserIDFromLocals(c)
 	if !ok {
@@ -38,6 +44,9 @@ func (h *calendarController) ListByDate(c *fiber.Ctx) error {
 	return h.Response.Item(c, "Calendar events fetched", events)
 }
 
+// parseDate แปลง query date เป็น time.Time สำหรับ list calendar รายวัน
+// input: value วันที่รูปแบบ YYYY-MM-DD หรือค่าว่าง
+// output: time.Time ของวันที่นั้น หรือวันนี้เมื่อ value ว่าง และ error ถ้า format ไม่ถูกต้อง
 func parseDate(value string) (time.Time, error) {
 	if value == "" {
 		now := time.Now()

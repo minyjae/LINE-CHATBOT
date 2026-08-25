@@ -10,6 +10,9 @@ import (
 	"minyjae/go-starter/utils"
 )
 
+// expenseRequest คือ payload สำหรับสร้างหรือแก้ไขรายจ่าย
+// input: JSON body จาก HTTP request
+// output: struct ที่ controller แปลงต่อเป็น entities.Expense
 type expenseRequest struct {
 	Amount      float64   `json:"amount"`
 	Currency    string    `json:"currency"`
@@ -18,6 +21,9 @@ type expenseRequest struct {
 	SpentAt     time.Time `json:"spent_at"`
 }
 
+// Create รับ HTTP request เพื่อสร้างรายจ่าย
+// input: Fiber context ที่มี userID ใน locals และ JSON body expenseRequest
+// output: HTTP created response พร้อม expense ที่สร้าง หรือ error response
 func (h *expenseController) Create(c *fiber.Ctx) error {
 	userID, ok := utils.UserIDFromLocals(c)
 	if !ok {
@@ -45,6 +51,9 @@ func (h *expenseController) Create(c *fiber.Ctx) error {
 	return h.Response.Created(c, "Expense created", expense)
 }
 
+// Update รับ HTTP request เพื่อแก้ไขรายจ่าย
+// input: Fiber context ที่มี userID ใน locals, path id, และ JSON body expenseRequest
+// output: HTTP updated response พร้อม expense ที่แก้ หรือ error response
 func (h *expenseController) Update(c *fiber.Ctx) error {
 	userID, ok := utils.UserIDFromLocals(c)
 	if !ok {
@@ -79,6 +88,9 @@ func (h *expenseController) Update(c *fiber.Ctx) error {
 	return h.Response.Updated(c, "Expense updated", expense)
 }
 
+// Delete รับ HTTP request เพื่อลบรายจ่าย
+// input: Fiber context ที่มี userID ใน locals และ path id
+// output: HTTP deleted response หรือ error response
 func (h *expenseController) Delete(c *fiber.Ctx) error {
 	userID, ok := utils.UserIDFromLocals(c)
 	if !ok {

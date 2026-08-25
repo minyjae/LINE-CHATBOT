@@ -10,6 +10,9 @@ import (
 	"minyjae/go-starter/utils"
 )
 
+// incomeRequest คือ payload สำหรับสร้างหรือแก้ไขรายรับ
+// input: JSON body จาก HTTP request
+// output: struct ที่ controller แปลงต่อเป็น entities.Income
 type incomeRequest struct {
 	Amount      float64   `json:"amount"`
 	Currency    string    `json:"currency"`
@@ -18,6 +21,9 @@ type incomeRequest struct {
 	ReceivedAt  time.Time `json:"received_at"`
 }
 
+// Create รับ HTTP request เพื่อสร้างรายรับ
+// input: Fiber context ที่มี userID ใน locals และ JSON body incomeRequest
+// output: HTTP created response พร้อม income ที่สร้าง หรือ error response
 func (h *incomeController) Create(c *fiber.Ctx) error {
 	userID, ok := utils.UserIDFromLocals(c)
 	if !ok {
@@ -45,6 +51,9 @@ func (h *incomeController) Create(c *fiber.Ctx) error {
 	return h.Response.Created(c, "Income created", income)
 }
 
+// Update รับ HTTP request เพื่อแก้ไขรายรับ
+// input: Fiber context ที่มี userID ใน locals, path id, และ JSON body incomeRequest
+// output: HTTP updated response พร้อม income ที่แก้ หรือ error response
 func (h *incomeController) Update(c *fiber.Ctx) error {
 	userID, ok := utils.UserIDFromLocals(c)
 	if !ok {
@@ -79,6 +88,9 @@ func (h *incomeController) Update(c *fiber.Ctx) error {
 	return h.Response.Updated(c, "Income updated", income)
 }
 
+// Delete รับ HTTP request เพื่อลบรายรับ
+// input: Fiber context ที่มี userID ใน locals และ path id
+// output: HTTP deleted response หรือ error response
 func (h *incomeController) Delete(c *fiber.Ctx) error {
 	userID, ok := utils.UserIDFromLocals(c)
 	if !ok {

@@ -9,11 +9,17 @@ import (
 	"minyjae/go-starter/utils"
 )
 
+// noteRequest คือ payload สำหรับสร้างหรือแก้ไข note
+// input: JSON body จาก HTTP request
+// output: struct ที่ controller แปลงต่อเป็น entities.Note
 type noteRequest struct {
 	Content string   `json:"content"`
 	Tags    []string `json:"tags"`
 }
 
+// Create รับ HTTP request เพื่อสร้าง note
+// input: Fiber context ที่มี userID ใน locals และ JSON body noteRequest
+// output: HTTP created response พร้อม note ที่สร้าง หรือ error response
 func (h *noteController) Create(c *fiber.Ctx) error {
 	userID, ok := utils.UserIDFromLocals(c)
 	if !ok {
@@ -38,6 +44,9 @@ func (h *noteController) Create(c *fiber.Ctx) error {
 	return h.Response.Created(c, "Note created", note)
 }
 
+// Update รับ HTTP request เพื่อแก้ไข note
+// input: Fiber context ที่มี userID ใน locals, path id, และ JSON body noteRequest
+// output: HTTP updated response พร้อม note ที่แก้ หรือ error response
 func (h *noteController) Update(c *fiber.Ctx) error {
 	userID, ok := utils.UserIDFromLocals(c)
 	if !ok {
@@ -69,6 +78,9 @@ func (h *noteController) Update(c *fiber.Ctx) error {
 	return h.Response.Updated(c, "Note updated", note)
 }
 
+// Delete รับ HTTP request เพื่อลบ note
+// input: Fiber context ที่มี userID ใน locals และ path id
+// output: HTTP deleted response หรือ error response
 func (h *noteController) Delete(c *fiber.Ctx) error {
 	userID, ok := utils.UserIDFromLocals(c)
 	if !ok {

@@ -10,6 +10,9 @@ import (
 	"minyjae/go-starter/utils"
 )
 
+// todoRequest คือ payload สำหรับสร้างหรือแก้ไข todo
+// input: JSON body จาก HTTP request
+// output: struct ที่ controller แปลงต่อเป็น entities.Todo
 type todoRequest struct {
 	Title       string     `json:"title"`
 	Description *string    `json:"description"`
@@ -19,6 +22,9 @@ type todoRequest struct {
 	CompletedAt *time.Time `json:"completed_at"`
 }
 
+// Create รับ HTTP request เพื่อสร้าง todo
+// input: Fiber context ที่มี userID ใน locals และ JSON body todoRequest
+// output: HTTP created response พร้อม todo ที่สร้าง หรือ error response
 func (h *todoController) Create(c *fiber.Ctx) error {
 	userID, ok := utils.UserIDFromLocals(c)
 	if !ok {
@@ -47,6 +53,9 @@ func (h *todoController) Create(c *fiber.Ctx) error {
 	return h.Response.Created(c, "Todo created", todo)
 }
 
+// Update รับ HTTP request เพื่อแก้ไข todo
+// input: Fiber context ที่มี userID ใน locals, path id, และ JSON body todoRequest
+// output: HTTP updated response พร้อม todo ที่แก้ หรือ error response
 func (h *todoController) Update(c *fiber.Ctx) error {
 	userID, ok := utils.UserIDFromLocals(c)
 	if !ok {
@@ -82,6 +91,9 @@ func (h *todoController) Update(c *fiber.Ctx) error {
 	return h.Response.Updated(c, "Todo updated", todo)
 }
 
+// Delete รับ HTTP request เพื่อลบ todo
+// input: Fiber context ที่มี userID ใน locals และ path id
+// output: HTTP deleted response หรือ error response
 func (h *todoController) Delete(c *fiber.Ctx) error {
 	userID, ok := utils.UserIDFromLocals(c)
 	if !ok {

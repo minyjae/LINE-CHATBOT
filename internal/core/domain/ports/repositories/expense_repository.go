@@ -6,6 +6,9 @@ import (
 	"minyjae/go-starter/internal/core/domain/entities"
 )
 
+// ExpenseRepository คือ contract สำหรับอ่าน/เขียนรายจ่ายและรวมยอดรายจ่าย
+// input: domain entity, userID, id หรือช่วงเวลา spent_at
+// output: domain entity/list/total หรือ error จาก adapter ที่ implement จริง
 type ExpenseRepository interface {
 	Create(expense *entities.Expense) (*entities.Expense, error)
 	GetByID(id uint) (*entities.Expense, error)
