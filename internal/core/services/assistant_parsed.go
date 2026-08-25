@@ -201,7 +201,7 @@ func (s *assistantService) handleParsedCreateTodo(input types.AssistantMessageIn
 
 	return &types.AssistantMessageResult{
 		Intent:    parsed.Intent,
-		ReplyText: fmt.Sprintf("Added todo \"%s\".", todo.Title),
+		ReplyText: fmt.Sprintf("จัด todo \"%s\" เข้าลิสต์ให้เรียบร้อยค่ะ", todo.Title),
 		Data:      todo,
 	}, nil
 }
@@ -231,7 +231,7 @@ func (s *assistantService) handleParsedCreateReminder(input types.AssistantMessa
 
 	return &types.AssistantMessageResult{
 		Intent:    parsed.Intent,
-		ReplyText: fmt.Sprintf("Reminder set for \"%s\" at %s.", reminder.Title, reminder.RemindAt.Format("02 Jan 2006 15:04")),
+		ReplyText: fmt.Sprintf("ตั้งเตือน \"%s\" เวลา %s ให้แล้วค่ะ เดี๋ยวถึงเวลาจะสะกิดให้ค่ะ", reminder.Title, reminder.RemindAt.Format("02 Jan 2006 15:04")),
 		Data:      reminder,
 	}, nil
 }
@@ -259,7 +259,7 @@ func (s *assistantService) handleParsedCreateNote(input types.AssistantMessageIn
 
 	return &types.AssistantMessageResult{
 		Intent:    parsed.Intent,
-		ReplyText: "Saved note.",
+		ReplyText: "จดโน้ตใส่สมุดให้เรียบร้อยค่ะ",
 		Data:      note,
 	}, nil
 }
@@ -301,7 +301,7 @@ func (s *assistantService) handleParsedCreateCalendarEvent(input types.Assistant
 
 	return &types.AssistantMessageResult{
 		Intent:    parsed.Intent,
-		ReplyText: fmt.Sprintf("Added event \"%s\" at %s.", event.Title, event.StartAt.Format("02 Jan 2006 15:04")),
+		ReplyText: fmt.Sprintf("ลงนัด \"%s\" เวลา %s ให้เรียบร้อยค่ะ", event.Title, event.StartAt.Format("02 Jan 2006 15:04")),
 		Data:      event,
 	}, nil
 }
@@ -312,7 +312,7 @@ func (s *assistantService) saveParsedUnknownIntent(input types.AssistantMessageI
 	}
 	return &types.AssistantMessageResult{
 		Intent:    "unknown",
-		ReplyText: "I could not understand that yet.",
+		ReplyText: "เลขาขออภัยค่ะ ยังตีความคำสั่งนี้ไม่ออกค่ะ",
 	}, nil
 }
 

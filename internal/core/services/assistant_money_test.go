@@ -178,7 +178,7 @@ func TestFormatMoneyCreateReplyUsesNormalizedTime(t *testing.T) {
 	occurredAt := time.Date(2026, time.August, 24, 10, 30, 0, 0, loc)
 
 	got := formatMoneyCreateReply("ซื้อข้าวขาหมู", 60, occurredAt, loc, true)
-	want := "บันทึกซื้อข้าวขาหมู 60.00 บาท ตอน 10:30 น. แล้วครับ"
+	want := "ลงบัญชี ซื้อข้าวขาหมู 60.00 บาท ตอน 10:30 น. ให้เรียบร้อยค่ะ"
 	if got != want {
 		t.Fatalf("reply = %q, want %q", got, want)
 	}
@@ -193,7 +193,7 @@ func TestFormatCashflowReportReplyIncludesItems(t *testing.T) {
 	}}
 
 	got := formatCashflowReportReply("วันที่ 24 Aug 2026", nil, expenses, 0, 60, loc)
-	want := "สรุปการเงินวันที่ 24 Aug 2026\n- รายรับ 0.00 บาท\n- รายจ่าย 60.00 บาท\n  - ข้าวขาหมู 60.00 บาท\n- สุทธิ -60.00 บาท"
+	want := "เลขาสรุปการเงินวันที่ 24 Aug 2026 ให้แล้วค่ะ\n- รายรับ 0.00 บาท\n- รายจ่าย 60.00 บาท\n  - ข้าวขาหมู 60.00 บาท\n- สุทธิ -60.00 บาทค่ะ"
 	if got != want {
 		t.Fatalf("reply = %q, want %q", got, want)
 	}
