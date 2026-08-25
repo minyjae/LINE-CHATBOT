@@ -5,12 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"time"
 
 	lineAdapter "minyjae/go-starter/internal/adapters/line"
 	"minyjae/go-starter/internal/core/domain/entities"
 	repoPort "minyjae/go-starter/internal/core/domain/ports/repositories"
 )
+
+const reminderPreAlertWindow = 10 * time.Minute
 
 type ReminderWorker struct {
 	reminderRepo   repoPort.ReminderRepository
@@ -68,7 +71,7 @@ func (w *ReminderWorker) Start(ctx context.Context) {
 
 func (w *ReminderWorker) processDueReminders() {
 	now := time.Now()
-	reminders, err := w.reminderRepo.ListPendingDue(now, w.batchSize)
+	reminders, err := w.reminderRepo.ListPendingDueOrUpcoming(now, now.Add(reminderPreAlertWindow), w.batchSize)
 	if err != nil {
 		log.Printf("Reminder worker failed to list reminders: %v", err)
 		return
@@ -88,7 +91,7 @@ func (w *ReminderWorker) sendReminder(reminder *entities.Reminder, sentAt time.T
 		return err
 	}
 
-	message := fmt.Sprintf("ถึงเวลาแล้วค่ะ เลขามาสะกิดเรื่อง \"%s\" ค่ะ", reminder.Title)
+	message := formatReminderMessage(reminder, sentAt)
 	sentCount := 0
 	for _, lineUser := range lineUsers {
 		if lineUser.Status != "active" {
@@ -120,5 +123,27 @@ func (w *ReminderWorker) sendReminder(reminder *entities.Reminder, sentAt time.T
 		return err
 	}
 
+	if shouldMarkReminderPreSent(reminder, sentAt) {
+		return w.reminderRepo.MarkPreSent(reminder.ID, sentAt)
+	}
 	return w.reminderRepo.MarkSent(reminder.ID, sentAt)
+}
+
+func shouldMarkReminderPreSent(reminder *entities.Reminder, sentAt time.Time) bool {
+	if reminder == nil || reminder.Status != "pending" {
+		return false
+	}
+	remaining := reminder.RemindAt.Sub(sentAt)
+	return remaining > 0 && remaining <= reminderPreAlertWindow
+}
+
+func formatReminderMessage(reminder *entities.Reminder, sentAt time.Time) string {
+	if shouldMarkReminderPreSent(reminder, sentAt) {
+		minutes := int(math.Ceil(reminder.RemindAt.Sub(sentAt).Minutes()))
+		if minutes < 1 {
+			minutes = 1
+		}
+		return fmt.Sprintf("อีก %d นาทีจะถึงเวลา \"%s\" แล้วค่ะ", minutes, reminder.Title)
+	}
+	return fmt.Sprintf("ถึงเวลาแล้วค่ะ เลขามาสะกิดเรื่อง \"%s\" ค่ะ", reminder.Title)
 }

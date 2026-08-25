@@ -8,6 +8,9 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
+// Summary ดึงสรุปการเงินรวมรายรับ รายจ่าย และยอดสุทธิ
+// input: Fiber context ที่มี userID ใน locals และ query period/date/month
+// output: HTTP response ที่มี period, income, expense, net และ currency หรือ error response
 func (h *financeController) Summary(c *fiber.Ctx) error {
 	userID, ok := utils.UserIDFromLocals(c)
 	if !ok {

@@ -11,6 +11,9 @@ import (
 	"minyjae/go-starter/types"
 )
 
+// lineWebhookService จัดการ use-case ข้อความจาก LINE ก่อนส่งเข้า assistant
+// input: สร้างจาก NewLineWebhookServiceImpl พร้อม user/line user/message log repository และ assistant service
+// output: service ที่รับ LINE text, ensure user, บันทึก log, และคืน reply text
 type lineWebhookService struct {
 	userRepo       repoPort.UserRepository
 	lineUserRepo   repoPort.LineUserRepository
@@ -20,6 +23,9 @@ type lineWebhookService struct {
 
 var _ servicePort.LineWebhookService = (*lineWebhookService)(nil)
 
+// NewLineWebhookServiceImpl สร้าง LINE webhook service implementation
+// input: repository สำหรับ user/line user/message log และ assistant service
+// output: *lineWebhookService ที่พร้อมถูกใช้ผ่าน LineWebhookService interface
 func NewLineWebhookServiceImpl(
 	userRepo repoPort.UserRepository,
 	lineUserRepo repoPort.LineUserRepository,
@@ -34,6 +40,9 @@ func NewLineWebhookServiceImpl(
 	}
 }
 
+// HandleTextMessage รับข้อความ LINE หนึ่งข้อความแล้วสร้างผลลัพธ์ตอบกลับ
+// input: LineTextMessageInput ที่มี line user id, reply token, text และ now
+// output: LineTextMessageResult ที่มี user id, message log id, intent, reply text หรือ error
 func (s *lineWebhookService) HandleTextMessage(input types.LineTextMessageInput) (*types.LineTextMessageResult, error) {
 	now := input.Now
 	if now.IsZero() {
@@ -88,6 +97,9 @@ func (s *lineWebhookService) HandleTextMessage(input types.LineTextMessageInput)
 	}, nil
 }
 
+// ensureUser หา user จาก LINE user id หรือสร้าง user ใหม่ถ้ายังไม่เคยเจอ
+// input: lineUserID จาก LINE, now เวลาปัจจุบันสำหรับ LastSeenAt/timestamps
+// output: *User ของระบบที่ผูกกับ LINE user id หรือ error จาก repository
 func (s *lineWebhookService) ensureUser(lineUserID string, now time.Time) (*entities.User, error) {
 	lineUser, err := s.lineUserRepo.GetByLineUserID(lineUserID)
 	if err == nil {

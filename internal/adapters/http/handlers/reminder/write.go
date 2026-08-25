@@ -10,6 +10,9 @@ import (
 	"minyjae/go-starter/utils"
 )
 
+// reminderRequest คือ payload สำหรับสร้างหรือแก้ไข reminder
+// input: JSON body จาก HTTP request
+// output: struct ที่ controller แปลงต่อเป็น entities.Reminder
 type reminderRequest struct {
 	Title    string     `json:"title"`
 	RemindAt time.Time  `json:"remind_at"`
@@ -17,6 +20,9 @@ type reminderRequest struct {
 	SentAt   *time.Time `json:"sent_at"`
 }
 
+// Create รับ HTTP request เพื่อสร้าง reminder
+// input: Fiber context ที่มี userID ใน locals และ JSON body reminderRequest
+// output: HTTP created response พร้อม reminder ที่สร้าง หรือ error response
 func (h *reminderController) Create(c *fiber.Ctx) error {
 	userID, ok := utils.UserIDFromLocals(c)
 	if !ok {
@@ -43,6 +49,9 @@ func (h *reminderController) Create(c *fiber.Ctx) error {
 	return h.Response.Created(c, "Reminder created", reminder)
 }
 
+// Update รับ HTTP request เพื่อแก้ไข reminder
+// input: Fiber context ที่มี userID ใน locals, path id, และ JSON body reminderRequest
+// output: HTTP updated response พร้อม reminder ที่แก้ หรือ error response
 func (h *reminderController) Update(c *fiber.Ctx) error {
 	userID, ok := utils.UserIDFromLocals(c)
 	if !ok {
@@ -76,6 +85,9 @@ func (h *reminderController) Update(c *fiber.Ctx) error {
 	return h.Response.Updated(c, "Reminder updated", reminder)
 }
 
+// Delete รับ HTTP request เพื่อลบ reminder
+// input: Fiber context ที่มี userID ใน locals และ path id
+// output: HTTP deleted response หรือ error response
 func (h *reminderController) Delete(c *fiber.Ctx) error {
 	userID, ok := utils.UserIDFromLocals(c)
 	if !ok {

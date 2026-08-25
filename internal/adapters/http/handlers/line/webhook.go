@@ -12,6 +12,9 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
+// Webhook รับ request จาก LINE Messaging API แล้วตอบกลับข้อความ
+// input: Fiber context ที่มี raw body, X-Line-Signature header และ LINE webhook payload
+// output: HTTP response จำนวน event ที่ประมวลผล หรือ error response
 func (h *lineController) Webhook(c *fiber.Ctx) error {
 	body := c.BodyRaw()
 	signature := c.Get("X-Line-Signature")
@@ -52,6 +55,9 @@ func (h *lineController) Webhook(c *fiber.Ctx) error {
 	return h.Response.Item(c, "LINE webhook processed", fiber.Map{"processed": processed})
 }
 
+// verifySignature ตรวจความถูกต้องของ LINE signature ด้วย HMAC-SHA256
+// input: body raw request, signature จาก header, channelSecret ของ LINE channel
+// output: true ถ้า signature ตรงกับ expected signature
 func verifySignature(body []byte, signature, channelSecret string) bool {
 	mac := hmac.New(sha256.New, []byte(channelSecret))
 	mac.Write(body)

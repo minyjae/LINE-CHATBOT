@@ -8,6 +8,9 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
+// SummaryPeriod คือช่วงเวลาที่ controller ใช้ query สรุปการเงิน
+// input: สร้างจาก ParseSummaryPeriod จาก query period/date/month
+// output: struct ที่มี kind/label/start/end สำหรับส่งต่อ service
 type SummaryPeriod struct {
 	Kind  string    `json:"kind"`
 	Label string    `json:"label"`
@@ -15,6 +18,9 @@ type SummaryPeriod struct {
 	End   time.Time `json:"end"`
 }
 
+// ParseSummaryPeriod แปลง query period/date/month ให้เป็นช่วงเวลา start/end
+// input: periodValue เช่น day/week/month, dateValue YYYY-MM-DD, monthValue YYYY-MM, now, loc timezone
+// output: SummaryPeriod หรือ error ถ้า period/date/month ไม่ถูกต้อง
 func ParseSummaryPeriod(periodValue, dateValue, monthValue string, now time.Time, loc *time.Location) (SummaryPeriod, error) {
 	if loc == nil {
 		loc = time.Local
@@ -60,6 +66,9 @@ func ParseSummaryPeriod(periodValue, dateValue, monthValue string, now time.Time
 	}
 }
 
+// parseDateValue แปลง query date เป็น time.Time
+// input: value วันที่รูปแบบ YYYY-MM-DD หรือค่าว่าง, loc timezone
+// output: time.Time, bool ว่ามี date ส่งมาไหม, และ error ถ้า format ไม่ถูกต้อง
 func parseDateValue(value string, loc *time.Location) (time.Time, bool, error) {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -72,6 +81,9 @@ func parseDateValue(value string, loc *time.Location) (time.Time, bool, error) {
 	return date, true, nil
 }
 
+// parseMonthValue แปลง query month เป็นปีและเดือน
+// input: value เดือนรูปแบบ YYYY-MM
+// output: year, time.Month และ error ถ้า format หรือเลขเดือนไม่ถูกต้อง
 func parseMonthValue(value string) (int, time.Month, error) {
 	parts := strings.Split(strings.TrimSpace(value), "-")
 	if len(parts) != 2 {
@@ -91,6 +103,9 @@ func parseMonthValue(value string) (int, time.Month, error) {
 	return year, time.Month(monthNumber), nil
 }
 
+// startOfWeek หาวันจันทร์ของสัปดาห์จากวันที่ที่ส่งมา
+// input: date วันที่อ้างอิง, loc timezone
+// output: time.Time วันจันทร์เวลา 00:00:00 ของสัปดาห์นั้น
 func startOfWeek(date time.Time, loc *time.Location) time.Time {
 	current := date.In(loc)
 	daysSinceMonday := int(current.Weekday()) - int(time.Monday)

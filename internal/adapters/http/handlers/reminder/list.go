@@ -5,6 +5,9 @@ import (
 	"minyjae/go-starter/utils"
 )
 
+// List ดึง reminder ของ user แบบแบ่งหน้า
+// input: Fiber context ที่มี userID ใน locals และ query limit/offset
+// output: HTTP response รายการ reminder หรือ error response
 func (h *reminderController) List(c *fiber.Ctx) error {
 	userID, ok := utils.UserIDFromLocals(c)
 	if !ok {

@@ -5,6 +5,9 @@ import (
 	"minyjae/go-starter/utils"
 )
 
+// List ดึง note ของ user แบบแบ่งหน้า
+// input: Fiber context ที่มี userID ใน locals และ query limit/offset
+// output: HTTP response รายการ note หรือ error response
 func (h *noteController) List(c *fiber.Ctx) error {
 	userID, ok := utils.UserIDFromLocals(c)
 	if !ok {
@@ -18,6 +21,9 @@ func (h *noteController) List(c *fiber.Ctx) error {
 	return h.Response.Item(c, "Notes fetched", notes)
 }
 
+// Search ค้น note ของ user จาก query string
+// input: Fiber context ที่มี userID ใน locals, query q และ limit
+// output: HTTP response รายการ note ที่ตรงคำค้น หรือ error response
 func (h *noteController) Search(c *fiber.Ctx) error {
 	userID, ok := utils.UserIDFromLocals(c)
 	if !ok {

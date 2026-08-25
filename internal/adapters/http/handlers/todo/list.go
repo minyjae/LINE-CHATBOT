@@ -6,6 +6,9 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
+// List ดึง todo ของ user แบบแบ่งหน้า
+// input: Fiber context ที่มี userID ใน locals และ query limit/offset
+// output: HTTP response รายการ todo หรือ error response
 func (h *todoController) List(c *fiber.Ctx) error {
 	userID, ok := utils.UserIDFromLocals(c)
 	if !ok {
@@ -19,6 +22,9 @@ func (h *todoController) List(c *fiber.Ctx) error {
 	return h.Response.Item(c, "Todos fetched", todos)
 }
 
+// ListPending ดึง todo ของ user เฉพาะรายการที่ยัง pending
+// input: Fiber context ที่มี userID ใน locals
+// output: HTTP response รายการ pending todo หรือ error response
 func (h *todoController) ListPending(c *fiber.Ctx) error {
 	userID, ok := utils.UserIDFromLocals(c)
 	if !ok {

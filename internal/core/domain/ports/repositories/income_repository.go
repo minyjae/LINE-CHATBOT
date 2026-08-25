@@ -6,6 +6,9 @@ import (
 	"minyjae/go-starter/internal/core/domain/entities"
 )
 
+// IncomeRepository คือ contract สำหรับอ่าน/เขียนรายรับและรวมยอดรายรับ
+// input: domain entity, userID, id หรือช่วงเวลา received_at
+// output: domain entity/list/total หรือ error จาก adapter ที่ implement จริง
 type IncomeRepository interface {
 	Create(income *entities.Income) (*entities.Income, error)
 	GetByID(id uint) (*entities.Income, error)
