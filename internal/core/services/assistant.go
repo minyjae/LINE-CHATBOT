@@ -52,7 +52,7 @@ func NewAssistantServiceImpl(
 func (s *assistantService) HandleTextMessage(input types.AssistantMessageInput) (*types.AssistantMessageResult, error) {
 	text := strings.TrimSpace(input.Text)
 	if text == "" {
-		return s.saveUnknownIntent(input, "ยังไม่เห็นข้อความที่ต้องการให้ช่วยครับ")
+		return s.saveUnknownIntent(input, "ยังไม่เห็นข้อความที่อยากให้เลขาช่วยเลยค่ะ ส่งมาได้เลย เดี๋ยวจัดการให้ค่ะ")
 	}
 
 	loc := loadLocation(input.Timezone)
@@ -70,6 +70,9 @@ func (s *assistantService) HandleTextMessage(input types.AssistantMessageInput) 
 	}
 	if isCalendarCancelCommand(text) {
 		return s.handleCancelCalendarEvent(input, text, now, loc)
+	}
+	if isCalendarListCommand(text) {
+		return s.handleCalendarList(input, now, loc)
 	}
 	if looksLikeCalendarIntentWithoutTime(text) {
 		return s.handleCreateNote(input, text, now)
@@ -104,7 +107,7 @@ func (s *assistantService) HandleTextMessage(input types.AssistantMessageInput) 
 		return s.handleCreateCalendarEvent(input, text, now, loc)
 	}
 
-	return s.saveUnknownIntent(input, "ตอนนี้ผมยังเข้าใจได้เฉพาะ todo, รายรับ, รายจ่าย, นัดหมาย, เตือนความจำ, note และสรุปพรุ่งนี้ครับ")
+	return s.saveUnknownIntent(input, "ตอนนี้เลขาคนนี้ถนัด todo, รายรับ, รายจ่าย, นัดหมาย, เตือนความจำ, note และสรุปพรุ่งนี้ค่ะ ส่งงานแนวนี้มาได้เลยค่ะ")
 }
 
 func (s *assistantService) handleCreateTodo(input types.AssistantMessageInput, text string, now time.Time) (*types.AssistantMessageResult, error) {
@@ -143,7 +146,7 @@ func (s *assistantService) handleCreateTodo(input types.AssistantMessageInput, t
 
 	return &types.AssistantMessageResult{
 		Intent:    intent.Intent,
-		ReplyText: fmt.Sprintf("เพิ่ม todo \"%s\" แล้วครับ", todo.Title),
+		ReplyText: fmt.Sprintf("จัด todo \"%s\" เข้าลิสต์ให้เรียบร้อยค่ะ", todo.Title),
 		Data:      todo,
 	}, nil
 }
@@ -191,7 +194,7 @@ func (s *assistantService) handleCreateExpense(input types.AssistantMessageInput
 
 	return &types.AssistantMessageResult{
 		Intent:    intent.Intent,
-		ReplyText: fmt.Sprintf("บันทึก%s %.2f บาทแล้วครับ", expense.Description, expense.Amount),
+		ReplyText: formatMoneyCreateReply(expense.Description, expense.Amount, expense.SpentAt, loc, hasExplicitMoneyEntryTime(text)),
 		Data:      expense,
 	}, nil
 }
@@ -239,7 +242,7 @@ func (s *assistantService) handleCreateIncome(input types.AssistantMessageInput,
 
 	return &types.AssistantMessageResult{
 		Intent:    intent.Intent,
-		ReplyText: fmt.Sprintf("บันทึก%s %.2f บาทแล้วครับ", income.Description, income.Amount),
+		ReplyText: formatMoneyCreateReply(income.Description, income.Amount, income.ReceivedAt, loc, hasExplicitMoneyEntryTime(text)),
 		Data:      income,
 	}, nil
 }
@@ -273,7 +276,7 @@ func (s *assistantService) handleExpenseSummary(input types.AssistantMessageInpu
 
 	return &types.AssistantMessageResult{
 		Intent:    intent.Intent,
-		ReplyText: fmt.Sprintf("เดือนนี้ใช้เงินไปแล้ว %.2f บาทครับ", total),
+		ReplyText: fmt.Sprintf("เลขาเช็กให้แล้ว เดือนนี้ใช้เงินไป %.2f บาทค่ะ", total),
 		Data:      map[string]any{"total": total, "start": monthStart, "end": nextMonth},
 	}, nil
 }
@@ -405,7 +408,7 @@ func (s *assistantService) handleCashflowReport(input types.AssistantMessageInpu
 
 	return &types.AssistantMessageResult{
 		Intent:    intent.Intent,
-		ReplyText: formatCashflowReportReply(period.Label, incomeTotal, expenseTotal),
+		ReplyText: formatCashflowReportReply(period.Label, incomes, expenses, incomeTotal, expenseTotal, loc),
 		Data: map[string]any{
 			"incomes":       incomes,
 			"expenses":      expenses,
@@ -460,7 +463,7 @@ func (s *assistantService) handleCreateCalendarEvent(input types.AssistantMessag
 
 	return &types.AssistantMessageResult{
 		Intent:    intent.Intent,
-		ReplyText: fmt.Sprintf("เพิ่มนัด \"%s\" เวลา %s แล้วครับ", event.Title, event.StartAt.Format("02 Jan 2006 15:04")),
+		ReplyText: fmt.Sprintf("ลงนัด \"%s\" เวลา %s ในปฏิทินให้เรียบร้อยค่ะ", event.Title, event.StartAt.Format("02 Jan 2006 15:04")),
 		Data:      event,
 	}, nil
 }
@@ -478,7 +481,7 @@ type calendarCancelRequest struct {
 func (s *assistantService) handleCancelCalendarEvent(input types.AssistantMessageInput, text string, now time.Time, loc *time.Location) (*types.AssistantMessageResult, error) {
 	request := parseCalendarCancelRequest(text, now, loc)
 	if request.Title == "" && !request.HasDate && !request.HasTime {
-		return s.saveCalendarCancelIntent(input, now, request, "needs_clarification", "อยากยกเลิกนัดไหนครับ ระบุชื่อ วัน หรือเวลาเพิ่มอีกนิด เช่น \"ยกเลิกนัดพรุ่งนี้ 10 โมง ประชุมกับทีม\"", nil)
+		return s.saveCalendarCancelIntent(input, now, request, "needs_clarification", "อยากให้เลขาถอนนัดไหนออกจากสมุดค่ะ ระบุชื่อ วัน หรือเวลาเพิ่มอีกนิด เช่น \"ยกเลิกนัดพรุ่งนี้ 10 โมง ประชุมกับทีม\" ค่ะ", nil)
 	}
 
 	candidates, err := s.calendarRepo.ListByStartBetween(input.UserID, request.Start, request.End)
@@ -488,7 +491,7 @@ func (s *assistantService) handleCancelCalendarEvent(input types.AssistantMessag
 
 	matches := filterCalendarCancelCandidates(candidates, request, loc)
 	if len(matches) == 0 {
-		return s.saveCalendarCancelIntent(input, now, request, "not_found", "ไม่พบนัดที่ตรงกับข้อความนี้ครับ ลองระบุวัน เวลา หรือชื่อนัดให้ชัดขึ้นอีกนิดครับ", nil)
+		return s.saveCalendarCancelIntent(input, now, request, "not_found", "เลขาค้นสมุดนัดแล้ว ยังไม่เจอนัดที่ตรงกับข้อความนี้ค่ะ ลองระบุวัน เวลา หรือชื่อนัดให้ชัดขึ้นอีกนิดค่ะ", nil)
 	}
 	if len(matches) > 1 {
 		return s.saveCalendarCancelIntent(input, now, request, "needs_clarification", formatCalendarCancelClarification(matches, loc), matches)
@@ -499,7 +502,7 @@ func (s *assistantService) handleCancelCalendarEvent(input types.AssistantMessag
 		return nil, err
 	}
 
-	reply := fmt.Sprintf("ยกเลิกนัด \"%s\" เวลา %s แล้วครับ", event.Title, event.StartAt.In(loc).Format("02 Jan 2006 15:04"))
+	reply := fmt.Sprintf("ยกเลิกนัด \"%s\" เวลา %s ออกจากปฏิทินให้แล้วค่ะ", event.Title, event.StartAt.In(loc).Format("02 Jan 2006 15:04"))
 	return s.saveCalendarCancelIntent(input, now, request, "completed", reply, matches)
 }
 
@@ -578,7 +581,7 @@ func (s *assistantService) handleCreateReminder(input types.AssistantMessageInpu
 
 	return &types.AssistantMessageResult{
 		Intent:    intent.Intent,
-		ReplyText: fmt.Sprintf("ตั้งเตือน \"%s\" เวลา %s แล้วครับ", reminder.Title, reminder.RemindAt.Format("02 Jan 2006 15:04")),
+		ReplyText: fmt.Sprintf("ตั้งเตือน \"%s\" เวลา %s ให้แล้วค่ะ เดี๋ยวถึงเวลาจะสะกิดให้ค่ะ", reminder.Title, reminder.RemindAt.Format("02 Jan 2006 15:04")),
 		Data:      reminder,
 	}, nil
 }
@@ -617,7 +620,7 @@ func (s *assistantService) handleCreateNote(input types.AssistantMessageInput, t
 
 	return &types.AssistantMessageResult{
 		Intent:    intent.Intent,
-		ReplyText: "จดบันทึกไว้แล้วครับ",
+		ReplyText: "จดโน้ตใส่สมุดให้เรียบร้อยค่ะ",
 		Data:      note,
 	}, nil
 }
@@ -644,9 +647,9 @@ func (s *assistantService) handleTomorrowSummary(input types.AssistantMessageInp
 		parts = append(parts, fmt.Sprintf("todo: %s", todo.Title))
 	}
 
-	reply := "พรุ่งนี้ยังไม่มีนัดหรือ todo ครับ"
+	reply := "พรุ่งนี้สมุดยังโล่งค่ะ ยังไม่มีนัดหรือ todo ค่ะ"
 	if len(parts) > 0 {
-		reply = "พรุ่งนี้มี:\n- " + strings.Join(parts, "\n- ")
+		reply = "พรุ่งนี้เลขาเช็กให้แล้ว มีรายการนี้ค่ะ:\n- " + strings.Join(parts, "\n- ") + "\nเดี๋ยวช่วยจำให้อีกแรงค่ะ"
 	}
 
 	entitiesJSON := marshalEntities(map[string]any{"start": start, "end": end, "event_count": len(events), "todo_count": len(todos)})
@@ -668,6 +671,34 @@ func (s *assistantService) handleTomorrowSummary(input types.AssistantMessageInp
 		Intent:    intent.Intent,
 		ReplyText: reply,
 		Data:      map[string]any{"events": events, "todos": todos},
+	}, nil
+}
+
+func (s *assistantService) handleCalendarList(input types.AssistantMessageInput, now time.Time, loc *time.Location) (*types.AssistantMessageResult, error) {
+	events, err := s.calendarRepo.ListByUserID(input.UserID, 50, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	entitiesJSON := marshalEntities(map[string]any{"event_count": len(events)})
+	intent, err := s.intentRepo.Create(&entities.AssistantIntent{
+		UserID:       input.UserID,
+		MessageLogID: input.MessageLogID,
+		Intent:       "calendar_list",
+		Confidence:   0.9,
+		Entities:     entitiesJSON,
+		Status:       "completed",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &types.AssistantMessageResult{
+		Intent:    intent.Intent,
+		ReplyText: formatCalendarListReply(events, loc),
+		Data:      map[string]any{"events": events},
 	}, nil
 }
 
@@ -828,6 +859,22 @@ func isTomorrowSummary(text string) bool {
 	return strings.Contains(text, "พรุ่งนี้") && (strings.Contains(text, "มีอะไร") || strings.Contains(text, "ทำอะไร"))
 }
 
+func isCalendarListCommand(text string) bool {
+	phrases := []string{
+		"ดูนัดทั้งหมด",
+		"ดู calendar ทั้งหมด",
+		"ดูปฏิทินทั้งหมด",
+		"มีนัดอะไรบ้าง",
+		"เช็คนัดทั้งหมด",
+		"เช็กนัดทั้งหมด",
+		"รายการนัดหมาย",
+		"รายการนัด",
+		"calendar ทั้งหมด",
+		"นัดทั้งหมด",
+	}
+	return containsAny(text, phrases)
+}
+
 func isReminderCommand(text string) bool {
 	return strings.Contains(text, "เตือน")
 }
@@ -965,10 +1012,42 @@ func looksLikeDateNumber(text string, start, end int) bool {
 
 func parseMoneyEntryTime(text string, now time.Time, loc *time.Location) time.Time {
 	current := now.In(loc)
+	hour, minute, hasTime := extractHourMinute(text)
 	if date, ok := parseReportReferenceDate(text, current, loc); ok {
+		if hasTime {
+			return time.Date(date.Year(), date.Month(), date.Day(), hour, minute, 0, 0, loc)
+		}
 		return time.Date(date.Year(), date.Month(), date.Day(), current.Hour(), current.Minute(), current.Second(), current.Nanosecond(), loc)
 	}
+	if hasTime {
+		return time.Date(current.Year(), current.Month(), current.Day(), hour, minute, 0, 0, loc)
+	}
 	return current
+}
+
+func mergeParsedMoneyTime(parsedAt time.Time, text string, loc *time.Location) time.Time {
+	parsedAt = parsedAt.In(loc)
+	hour, minute, hasTime := extractHourMinute(text)
+	if hasTime && parsedAt.Hour() == 0 && parsedAt.Minute() == 0 && parsedAt.Second() == 0 && parsedAt.Nanosecond() == 0 {
+		return time.Date(parsedAt.Year(), parsedAt.Month(), parsedAt.Day(), hour, minute, 0, 0, loc)
+	}
+	return parsedAt
+}
+
+func hasExplicitMoneyEntryTime(text string) bool {
+	_, _, ok := extractHourMinute(text)
+	return ok
+}
+
+func formatMoneyCreateReply(description string, amount float64, occurredAt time.Time, loc *time.Location, includeTime bool) string {
+	description = normalizeDescriptionSpaces(description)
+	if description == "" {
+		description = "รายการ"
+	}
+	if includeTime {
+		return fmt.Sprintf("ลงบัญชี %s %.2f บาท ตอน %s น. ให้เรียบร้อยค่ะ", description, amount, occurredAt.In(loc).Format("15:04"))
+	}
+	return fmt.Sprintf("ลงบัญชี %s %.2f บาทให้เรียบร้อยค่ะ", description, amount)
 }
 
 func parseReportReferenceDate(text string, current time.Time, loc *time.Location) (time.Time, bool) {
@@ -1229,22 +1308,65 @@ func inferIncomeCategory(text string) string {
 }
 
 func cleanupExpenseDescription(text string) string {
-	re := regexp.MustCompile(`[0-9]+(?:\.[0-9]+)?\s*(บาท|บ|thb|THB)?`)
-	cleaned := strings.TrimSpace(re.ReplaceAllString(text, ""))
+	return cleanupMoneyDescription(text, "รายจ่าย", nil)
+}
+
+func cleanupIncomeDescription(text string) string {
+	return cleanupMoneyDescription(text, "รายรับ", []string{"บันทึก", "เพิ่ม", "รายรับ", "รับเงิน", "ได้เงิน", "ได้รับเงิน", "เงินเข้า", "income", "Income"})
+}
+
+func cleanupMoneyDescription(text, fallback string, removers []string) string {
+	cleaned := strings.TrimSpace(text)
+	cleaned = removeMoneyTimePhrases(cleaned)
+	cleaned = removeMoneyDatePhrases(cleaned)
+
+	amount := regexp.MustCompile(`[0-9]+(?:\.[0-9]+)?\s*(บาท|บ|thb|THB)?`)
+	cleaned = amount.ReplaceAllString(cleaned, "")
+	cleaned = cleanupByRemoving(cleaned, removers)
+	cleaned = cleanupByRemoving(cleaned, []string{"วันนี้", "พรุ่งนี้", "เมื่อวาน", "ตอน", "เวลา"})
+	cleaned = normalizeDescriptionSpaces(cleaned)
+
 	if cleaned == "" {
-		return "รายจ่าย"
+		return fallback
 	}
 	return cleaned
 }
 
-func cleanupIncomeDescription(text string) string {
-	re := regexp.MustCompile(`[0-9]+(?:\.[0-9]+)?\s*(บาท|บ|thb|THB)?`)
-	cleaned := strings.TrimSpace(re.ReplaceAllString(text, ""))
-	cleaned = cleanupByRemoving(cleaned, []string{"บันทึก", "เพิ่ม", "รายรับ", "รับเงิน", "ได้เงิน", "ได้รับเงิน", "เงินเข้า", "income", "Income"})
-	if cleaned == "" {
-		return "รายรับ"
+func removeMoneyTimePhrases(text string) string {
+	patterns := []string{
+		`(?:ตอน|เวลา)?\s*\d{1,2}\s*โมง(?:\s*(?:เช้า|เย็น|ค่ำ))?(?:\s*(?:ครึ่ง|\d{1,2}\s*นาที))?(?:\s*(?:เช้า|เย็น|ค่ำ))?`,
+		`(?:ตอน|เวลา)?\s*\d{1,2}\s*ทุ่ม(?:\s*(?:ครึ่ง|\d{1,2}\s*นาที))?`,
+		`(?:ตอน|เวลา)?\s*บ่าย\s*\d{1,2}(?:\s*โมง)?(?:\s*(?:ครึ่ง|\d{1,2}\s*นาที))?`,
+		`(?:ตอน|เวลา)?\s*ตี\s*\d{1,2}(?:\s*(?:ครึ่ง|\d{1,2}\s*นาที))?`,
+		`(?:ตอน|เวลา)?\s*\d{1,2}[:.]\d{2}\s*(?:น\.?|นาฬิกา)?`,
+		`(?:ตอน|เวลา)?\s*\d{1,2}\s*(?:น\.|นาฬิกา)(?:\s*(?:ครึ่ง|\d{1,2}\s*นาที))?`,
 	}
-	return cleaned
+	for _, pattern := range patterns {
+		re := regexp.MustCompile(pattern)
+		text = re.ReplaceAllString(text, "")
+	}
+	return text
+}
+
+func removeMoneyDatePhrases(text string) string {
+	patterns := []string{
+		`\b\d{4}-\d{1,2}-\d{1,2}\b`,
+		`\b\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?\b`,
+		`วันที่\s*\d{1,2}\s*(?:` + thaiMonthPattern() + `)?(?:\s*\d{2,4})?`,
+	}
+	for _, pattern := range patterns {
+		re := regexp.MustCompile(`(?i)` + pattern)
+		text = re.ReplaceAllString(text, "")
+	}
+	return text
+}
+
+func normalizeDescriptionSpaces(text string) string {
+	text = strings.TrimSpace(text)
+	spaces := regexp.MustCompile(`\s+`)
+	text = spaces.ReplaceAllString(text, " ")
+	punctuationSpaces := regexp.MustCompile(`\s+([,.;:!?])`)
+	return punctuationSpaces.ReplaceAllString(text, "$1")
 }
 
 func cleanupTodoTitle(text string) string {
@@ -1262,10 +1384,45 @@ func cleanupNoteContent(text string) string {
 }
 
 func cleanupCalendarTitle(text string) string {
-	return cleanupTimeWords(cleanupByRemoving(text, []string{
+	cleaned := stripCalendarTimeClause(text)
+	cleaned = removeCalendarTimePhrases(cleaned)
+	cleaned = cleanupByRemoving(cleaned, []string{
 		"เพิ่มนัด", "ลงนัด", "บันทึกนัด", "สร้างนัด", "นัด",
 		"เพิ่มตาราง", "ลงตาราง", "บันทึกตาราง", "calendar", "Calendar",
-	}))
+	})
+	cleaned = cleanupByRemoving(cleaned, []string{"วันนี้", "พรุ่งนี้", "เมื่อวาน"})
+	return normalizeDescriptionSpaces(cleaned)
+}
+
+func stripCalendarTimeClause(text string) string {
+	cutWords := []string{" ตอน ", " เวลา ", "ตอน", "เวลา"}
+	cutAt := -1
+	for _, word := range cutWords {
+		if idx := strings.Index(text, word); idx >= 0 && (cutAt == -1 || idx < cutAt) {
+			cutAt = idx
+		}
+	}
+	if cutAt >= 0 {
+		return strings.TrimSpace(text[:cutAt])
+	}
+	return text
+}
+
+func removeCalendarTimePhrases(text string) string {
+	patterns := []string{
+		`เที่ยง(?:\s*(?:ครึ่ง|\d{1,2}\s*นาที))?`,
+		`\d{1,2}\s*โมง(?:\s*(?:เช้า|เย็น|ค่ำ))?(?:\s*(?:ครึ่ง|\d{1,2}\s*นาที))?(?:\s*(?:เช้า|เย็น|ค่ำ))?`,
+		`\d{1,2}\s*ทุ่ม(?:\s*(?:ครึ่ง|\d{1,2}\s*นาที))?`,
+		`บ่าย\s*\d{1,2}(?:\s*โมง)?(?:\s*(?:ครึ่ง|\d{1,2}\s*นาที))?`,
+		`ตี\s*\d{1,2}(?:\s*(?:ครึ่ง|\d{1,2}\s*นาที))?`,
+		`\d{1,2}[:.]\d{2}\s*(?:น\.?|นาฬิกา)?`,
+		`\d{1,2}\s*(?:น\.|นาฬิกา)(?:\s*(?:ครึ่ง|\d{1,2}\s*นาที))?`,
+	}
+	for _, pattern := range patterns {
+		re := regexp.MustCompile(`(?i)` + pattern)
+		text = re.ReplaceAllString(text, "")
+	}
+	return text
 }
 
 func cleanupByRemoving(text string, tokens []string) string {
@@ -1348,29 +1505,128 @@ func parseCalendarCancelRequest(text string, now time.Time, loc *time.Location) 
 }
 
 func extractHourMinute(text string) (int, int, bool) {
-	colon := regexp.MustCompile(`(\d{1,2})[:.](\d{2})`)
-	if match := colon.FindStringSubmatch(text); len(match) == 3 {
-		hour, _ := strconv.Atoi(match[1])
-		minute, _ := strconv.Atoi(match[2])
-		return normalizeThaiHour(text, hour), minute, true
+	if hour, minute, ok := extractThaiNoonTime(text); ok {
+		return hour, minute, true
 	}
-
-	clock := regexp.MustCompile(`(\d{1,2})\s*โมง`)
-	if match := clock.FindStringSubmatch(text); len(match) == 2 {
-		hour, _ := strconv.Atoi(match[1])
-		return normalizeThaiHour(text, hour), 0, true
+	if hour, minute, ok := extractThaiTuumTime(text); ok {
+		return hour, minute, true
 	}
-
-	thaiShortClock := regexp.MustCompile(`(\d{1,2})\s*น\.?`)
-	if match := thaiShortClock.FindStringSubmatch(text); len(match) == 2 {
-		hour, _ := strconv.Atoi(match[1])
-		return normalizeThaiHour(text, hour), 0, true
+	if hour, minute, ok := extractThaiAfternoonTime(text); ok {
+		return hour, minute, true
+	}
+	if hour, minute, ok := extractThaiClockTime(text); ok {
+		return hour, minute, true
+	}
+	if hour, minute, ok := extractSeparatedHourMinute(text); ok {
+		return hour, minute, true
+	}
+	if hour, minute, ok := extractThaiShortClockTime(text); ok {
+		return hour, minute, true
+	}
+	if hour, minute, ok := extractThaiDawnTime(text); ok {
+		return hour, minute, true
 	}
 
 	return 0, 0, false
 }
 
+func extractThaiNoonTime(text string) (int, int, bool) {
+	re := regexp.MustCompile(`เที่ยง(?:\s*(ครึ่ง|\d{1,2}\s*นาที))?`)
+	if match := re.FindStringSubmatch(text); len(match) == 2 {
+		minute := parseThaiMinuteSuffix(match[1])
+		return validHourMinute(12, minute)
+	}
+	return 0, 0, false
+}
+
+func extractSeparatedHourMinute(text string) (int, int, bool) {
+	re := regexp.MustCompile(`(\d{1,2})[:.](\d{2})\s*(?:น\.?|นาฬิกา)?`)
+	if match := re.FindStringSubmatch(text); len(match) == 3 {
+		hour, _ := strconv.Atoi(match[1])
+		minute, _ := strconv.Atoi(match[2])
+		return validHourMinute(normalizeThaiHour(text, hour), minute)
+	}
+	return 0, 0, false
+}
+
+func extractThaiClockTime(text string) (int, int, bool) {
+	re := regexp.MustCompile(`(\d{1,2})\s*โมง(?:\s*(เช้า|เย็น|ค่ำ))?(?:\s*(ครึ่ง|\d{1,2}\s*นาที))?(?:\s*(เช้า|เย็น|ค่ำ))?`)
+	if match := re.FindStringSubmatch(text); len(match) == 5 {
+		hour, _ := strconv.Atoi(match[1])
+		minute := parseThaiMinuteSuffix(firstNonEmpty(match[3]))
+		context := strings.TrimSpace(match[0] + " " + match[2] + " " + match[4])
+		return validHourMinute(normalizeThaiHour(context, hour), minute)
+	}
+	return 0, 0, false
+}
+
+func extractThaiShortClockTime(text string) (int, int, bool) {
+	re := regexp.MustCompile(`(\d{1,2})\s*(?:น\.|นาฬิกา)(?:\s*(ครึ่ง|\d{1,2}\s*นาที))?`)
+	if match := re.FindStringSubmatch(text); len(match) == 3 {
+		hour, _ := strconv.Atoi(match[1])
+		minute := parseThaiMinuteSuffix(match[2])
+		return validHourMinute(normalizeThaiHour(match[0], hour), minute)
+	}
+	return 0, 0, false
+}
+
+func extractThaiAfternoonTime(text string) (int, int, bool) {
+	re := regexp.MustCompile(`บ่าย\s*(\d{1,2})(?:\s*โมง)?(?:\s*(ครึ่ง|\d{1,2}\s*นาที))?`)
+	if match := re.FindStringSubmatch(text); len(match) == 3 {
+		hour, _ := strconv.Atoi(match[1])
+		minute := parseThaiMinuteSuffix(match[2])
+		return validHourMinute(normalizeThaiHour(match[0], hour), minute)
+	}
+	return 0, 0, false
+}
+
+func extractThaiTuumTime(text string) (int, int, bool) {
+	re := regexp.MustCompile(`(\d{1,2})\s*ทุ่ม(?:\s*(ครึ่ง|\d{1,2}\s*นาที))?`)
+	if match := re.FindStringSubmatch(text); len(match) == 3 {
+		tuum, _ := strconv.Atoi(match[1])
+		minute := parseThaiMinuteSuffix(match[2])
+		hour := 18 + tuum
+		if hour == 24 {
+			hour = 0
+		}
+		return validHourMinute(hour, minute)
+	}
+	return 0, 0, false
+}
+
+func extractThaiDawnTime(text string) (int, int, bool) {
+	re := regexp.MustCompile(`ตี\s*(\d{1,2})(?:\s*(ครึ่ง|\d{1,2}\s*นาที))?`)
+	if match := re.FindStringSubmatch(text); len(match) == 3 {
+		hour, _ := strconv.Atoi(match[1])
+		minute := parseThaiMinuteSuffix(match[2])
+		return validHourMinute(hour, minute)
+	}
+	return 0, 0, false
+}
+
+func parseThaiMinuteSuffix(value string) int {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0
+	}
+	if strings.Contains(value, "ครึ่ง") {
+		return 30
+	}
+	re := regexp.MustCompile(`(\d{1,2})`)
+	if match := re.FindStringSubmatch(value); len(match) == 2 {
+		minute, _ := strconv.Atoi(match[1])
+		return minute
+	}
+	return 0
+}
+
 func normalizeThaiHour(text string, hour int) int {
+	if strings.Contains(text, "เที่ยงคืน") {
+		return 0
+	}
+	if strings.Contains(text, "เที่ยง") && hour == 12 {
+		return 12
+	}
 	if strings.Contains(text, "บ่าย") && hour < 12 {
 		return hour + 12
 	}
@@ -1378,6 +1634,13 @@ func normalizeThaiHour(text string, hour int) int {
 		return hour + 12
 	}
 	return hour
+}
+
+func validHourMinute(hour, minute int) (int, int, bool) {
+	if hour < 0 || hour > 23 || minute < 0 || minute > 59 {
+		return 0, 0, false
+	}
+	return hour, minute, true
 }
 
 func cleanupCalendarCancelTitle(text string) string {
@@ -1448,23 +1711,46 @@ func formatCalendarCancelClarification(events []*entities.CalendarEvent, loc *ti
 		limit = 5
 	}
 
-	lines := []string{"เจอหลายนัดที่ใกล้เคียงครับ ระบุเวลา/ชื่อนัดให้ชัดขึ้นอีกนิด เช่น \"ยกเลิกนัด 10 โมง ประชุมกับทีม\""}
+	lines := []string{"เจอหลายนัดที่ใกล้เคียงกันค่ะ เลขาขอเวลา/ชื่อนัดให้ชัดขึ้นอีกนิด เช่น \"ยกเลิกนัด 10 โมง ประชุมกับทีม\" ค่ะ"}
 	for i := 0; i < limit; i++ {
 		event := events[i]
 		lines = append(lines, fmt.Sprintf("- %s %s", event.StartAt.In(loc).Format("02 Jan 15:04"), event.Title))
 	}
 	if len(events) > limit {
-		lines = append(lines, fmt.Sprintf("และอีก %d นัดครับ", len(events)-limit))
+		lines = append(lines, fmt.Sprintf("และอีก %d นัดค่ะ", len(events)-limit))
 	}
+	lines = append(lines, "เลือกนัดที่ใช่แล้วส่งมาได้เลยค่ะ")
+	return strings.Join(lines, "\n")
+}
+
+func formatCalendarListReply(events []*entities.CalendarEvent, loc *time.Location) string {
+	if len(events) == 0 {
+		return "สมุดนัดยังโล่งค่ะ ยังไม่มีนัดที่บันทึกไว้ค่ะ"
+	}
+
+	limit := len(events)
+	if limit > 10 {
+		limit = 10
+	}
+
+	lines := []string{"เลขาเช็กสมุดนัดให้แล้ว มีรายการนัดหมายทั้งหมดค่ะ"}
+	for i := 0; i < limit; i++ {
+		event := events[i]
+		lines = append(lines, fmt.Sprintf("- %s %s", event.StartAt.In(loc).Format("02 Jan 2006 15:04"), event.Title))
+	}
+	if len(events) > limit {
+		lines = append(lines, fmt.Sprintf("และอีก %d นัดค่ะ", len(events)-limit))
+	}
+	lines = append(lines, "เช็กให้เรียบร้อยค่ะ")
 	return strings.Join(lines, "\n")
 }
 
 func formatExpenseReportReply(label string, expenses []*entities.Expense, total float64, loc *time.Location) string {
 	if len(expenses) == 0 {
-		return fmt.Sprintf("%sยังไม่มีรายจ่ายที่บันทึกไว้ครับ", label)
+		return fmt.Sprintf("%sยังไม่มีรายจ่ายที่บันทึกไว้ค่ะ", label)
 	}
 
-	lines := []string{fmt.Sprintf("รายการรายจ่าย%s รวม %.2f บาท", label, total)}
+	lines := []string{fmt.Sprintf("เลขาสรุปรายจ่าย%s ให้แล้ว รวม %.2f บาทค่ะ", label, total)}
 	limit := len(expenses)
 	if limit > 10 {
 		limit = 10
@@ -1475,18 +1761,19 @@ func formatExpenseReportReply(label string, expenses []*entities.Expense, total 
 		lines = append(lines, fmt.Sprintf("- %s %s %.2f บาท", expense.SpentAt.In(loc).Format("15:04"), expense.Description, expense.Amount))
 	}
 	if len(expenses) > limit {
-		lines = append(lines, fmt.Sprintf("และอีก %d รายการครับ", len(expenses)-limit))
+		lines = append(lines, fmt.Sprintf("และอีก %d รายการค่ะ", len(expenses)-limit))
 	}
+	lines = append(lines, "สรุปให้เรียบร้อยค่ะ")
 
 	return strings.Join(lines, "\n")
 }
 
 func formatIncomeReportReply(label string, incomes []*entities.Income, total float64, loc *time.Location) string {
 	if len(incomes) == 0 {
-		return fmt.Sprintf("%sยังไม่มีรายรับที่บันทึกไว้ครับ", label)
+		return fmt.Sprintf("%sยังไม่มีรายรับที่บันทึกไว้ค่ะ", label)
 	}
 
-	lines := []string{fmt.Sprintf("รายการรายรับ%s รวม %.2f บาท", label, total)}
+	lines := []string{fmt.Sprintf("เลขาสรุปรายรับ%s ให้แล้ว รวม %.2f บาทค่ะ", label, total)}
 	limit := len(incomes)
 	if limit > 10 {
 		limit = 10
@@ -1497,20 +1784,33 @@ func formatIncomeReportReply(label string, incomes []*entities.Income, total flo
 		lines = append(lines, fmt.Sprintf("- %s %s %.2f บาท", income.ReceivedAt.In(loc).Format("15:04"), income.Description, income.Amount))
 	}
 	if len(incomes) > limit {
-		lines = append(lines, fmt.Sprintf("และอีก %d รายการครับ", len(incomes)-limit))
+		lines = append(lines, fmt.Sprintf("และอีก %d รายการค่ะ", len(incomes)-limit))
 	}
+	lines = append(lines, "สรุปให้เรียบร้อยค่ะ")
 
 	return strings.Join(lines, "\n")
 }
 
-func formatCashflowReportReply(label string, incomeTotal, expenseTotal float64) string {
+func formatCashflowReportReply(label string, incomes []*entities.Income, expenses []*entities.Expense, incomeTotal, expenseTotal float64, loc *time.Location) string {
 	net := incomeTotal - expenseTotal
-	return strings.Join([]string{
-		fmt.Sprintf("สรุปการเงิน%s", label),
+	lines := []string{
+		fmt.Sprintf("เลขาสรุปการเงิน%s ให้แล้วค่ะ", label),
 		fmt.Sprintf("- รายรับ %.2f บาท", incomeTotal),
-		fmt.Sprintf("- รายจ่าย %.2f บาท", expenseTotal),
-		fmt.Sprintf("- สุทธิ %.2f บาท", net),
-	}, "\n")
+	}
+
+	for i := len(incomes) - 1; i >= 0; i-- {
+		income := incomes[i]
+		lines = append(lines, fmt.Sprintf("  - %s %.2f บาท", income.Description, income.Amount))
+	}
+
+	lines = append(lines, fmt.Sprintf("- รายจ่าย %.2f บาท", expenseTotal))
+	for i := len(expenses) - 1; i >= 0; i-- {
+		expense := expenses[i]
+		lines = append(lines, fmt.Sprintf("  - %s %.2f บาท", expense.Description, expense.Amount))
+	}
+
+	lines = append(lines, fmt.Sprintf("- สุทธิ %.2f บาทค่ะ", net))
+	return strings.Join(lines, "\n")
 }
 
 func isQuestion(text string) bool {

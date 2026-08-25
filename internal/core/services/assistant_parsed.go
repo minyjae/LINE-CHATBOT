@@ -101,11 +101,11 @@ func (s *assistantService) handleParsedCreateExpense(input types.AssistantMessag
 		return nil, fmt.Errorf("parsed expense amount is missing")
 	}
 
-	spentAt := now
+	spentAt := parseMoneyEntryTime(text, now, loc)
 	if parsedAt, ok := parseOptionalIntentTime(parsed.Entities.SpentAt, loc); ok {
-		spentAt = parsedAt
+		spentAt = mergeParsedMoneyTime(parsedAt, text, loc)
 	}
-	description := firstNonEmpty(parsed.Entities.Description, parsed.Entities.Title, cleanupExpenseDescription(text))
+	description := cleanupExpenseDescription(firstNonEmpty(parsed.Entities.Description, parsed.Entities.Title, text))
 
 	expense, err := s.expenseRepo.Create(&entities.Expense{
 		UserID:          input.UserID,
@@ -127,7 +127,7 @@ func (s *assistantService) handleParsedCreateExpense(input types.AssistantMessag
 
 	return &types.AssistantMessageResult{
 		Intent:    parsed.Intent,
-		ReplyText: fmt.Sprintf("Recorded %s %.2f %s.", expense.Description, expense.Amount, expense.Currency),
+		ReplyText: formatMoneyCreateReply(expense.Description, expense.Amount, expense.SpentAt, loc, hasExplicitMoneyEntryTime(text)),
 		Data:      expense,
 	}, nil
 }
@@ -137,13 +137,13 @@ func (s *assistantService) handleParsedCreateIncome(input types.AssistantMessage
 		return nil, fmt.Errorf("parsed income amount is missing")
 	}
 
-	receivedAt := now
+	receivedAt := parseMoneyEntryTime(text, now, loc)
 	if parsedAt, ok := parseOptionalIntentTime(parsed.Entities.ReceivedAt, loc); ok {
-		receivedAt = parsedAt
+		receivedAt = mergeParsedMoneyTime(parsedAt, text, loc)
 	} else if parsedAt, ok := parseOptionalIntentTime(parsed.Entities.SpentAt, loc); ok {
-		receivedAt = parsedAt
+		receivedAt = mergeParsedMoneyTime(parsedAt, text, loc)
 	}
-	description := firstNonEmpty(parsed.Entities.Description, parsed.Entities.Title, cleanupIncomeDescription(text))
+	description := cleanupIncomeDescription(firstNonEmpty(parsed.Entities.Description, parsed.Entities.Title, text))
 
 	income, err := s.incomeRepo.Create(&entities.Income{
 		UserID:          input.UserID,
@@ -165,7 +165,7 @@ func (s *assistantService) handleParsedCreateIncome(input types.AssistantMessage
 
 	return &types.AssistantMessageResult{
 		Intent:    parsed.Intent,
-		ReplyText: fmt.Sprintf("Recorded %s %.2f %s.", income.Description, income.Amount, income.Currency),
+		ReplyText: formatMoneyCreateReply(income.Description, income.Amount, income.ReceivedAt, loc, hasExplicitMoneyEntryTime(text)),
 		Data:      income,
 	}, nil
 }
@@ -201,7 +201,7 @@ func (s *assistantService) handleParsedCreateTodo(input types.AssistantMessageIn
 
 	return &types.AssistantMessageResult{
 		Intent:    parsed.Intent,
-		ReplyText: fmt.Sprintf("Added todo \"%s\".", todo.Title),
+		ReplyText: fmt.Sprintf("จัด todo \"%s\" เข้าลิสต์ให้เรียบร้อยค่ะ", todo.Title),
 		Data:      todo,
 	}, nil
 }
@@ -231,7 +231,7 @@ func (s *assistantService) handleParsedCreateReminder(input types.AssistantMessa
 
 	return &types.AssistantMessageResult{
 		Intent:    parsed.Intent,
-		ReplyText: fmt.Sprintf("Reminder set for \"%s\" at %s.", reminder.Title, reminder.RemindAt.Format("02 Jan 2006 15:04")),
+		ReplyText: fmt.Sprintf("ตั้งเตือน \"%s\" เวลา %s ให้แล้วค่ะ เดี๋ยวถึงเวลาจะสะกิดให้ค่ะ", reminder.Title, reminder.RemindAt.Format("02 Jan 2006 15:04")),
 		Data:      reminder,
 	}, nil
 }
@@ -259,7 +259,7 @@ func (s *assistantService) handleParsedCreateNote(input types.AssistantMessageIn
 
 	return &types.AssistantMessageResult{
 		Intent:    parsed.Intent,
-		ReplyText: "Saved note.",
+		ReplyText: "จดโน้ตใส่สมุดให้เรียบร้อยค่ะ",
 		Data:      note,
 	}, nil
 }
@@ -301,7 +301,7 @@ func (s *assistantService) handleParsedCreateCalendarEvent(input types.Assistant
 
 	return &types.AssistantMessageResult{
 		Intent:    parsed.Intent,
-		ReplyText: fmt.Sprintf("Added event \"%s\" at %s.", event.Title, event.StartAt.Format("02 Jan 2006 15:04")),
+		ReplyText: fmt.Sprintf("ลงนัด \"%s\" เวลา %s ให้เรียบร้อยค่ะ", event.Title, event.StartAt.Format("02 Jan 2006 15:04")),
 		Data:      event,
 	}, nil
 }
@@ -312,7 +312,7 @@ func (s *assistantService) saveParsedUnknownIntent(input types.AssistantMessageI
 	}
 	return &types.AssistantMessageResult{
 		Intent:    "unknown",
-		ReplyText: "I could not understand that yet.",
+		ReplyText: "เลขาขออภัยค่ะ ยังตีความคำสั่งนี้ไม่ออกค่ะ",
 	}, nil
 }
 

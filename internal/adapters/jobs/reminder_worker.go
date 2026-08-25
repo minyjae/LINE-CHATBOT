@@ -88,7 +88,7 @@ func (w *ReminderWorker) sendReminder(reminder *entities.Reminder, sentAt time.T
 		return err
 	}
 
-	message := fmt.Sprintf("แจ้งเตือน: %s", reminder.Title)
+	message := fmt.Sprintf("ถึงเวลาแล้วค่ะ เลขามาสะกิดเรื่อง \"%s\" ค่ะ", reminder.Title)
 	sentCount := 0
 	for _, lineUser := range lineUsers {
 		if lineUser.Status != "active" {
