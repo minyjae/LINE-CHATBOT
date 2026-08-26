@@ -11,6 +11,7 @@ import (
 	servicePort "minyjae/go-starter/internal/core/domain/ports/services"
 	"minyjae/go-starter/types"
 	calendarnlp "minyjae/go-starter/utils/assistant/calendar"
+	helpnlp "minyjae/go-starter/utils/assistant/help"
 	moneynlp "minyjae/go-starter/utils/assistant/money"
 	notenlp "minyjae/go-starter/utils/assistant/note"
 	remindernlp "minyjae/go-starter/utils/assistant/reminder"
@@ -72,6 +73,9 @@ func (s *assistantService) HandleTextMessage(input types.AssistantMessageInput) 
 	loc := loadLocation(input.Timezone)
 	now := input.Now.In(loc)
 
+	if helpnlp.IsCommand(text) {
+		return s.handleHelp(input, text, now)
+	}
 	if target, period, ok := moneynlp.ParseReportRequest(text, now, loc); ok {
 		switch target {
 		case moneynlp.ReportTargetIncome:
@@ -122,6 +126,32 @@ func (s *assistantService) HandleTextMessage(input types.AssistantMessageInput) 
 	}
 
 	return s.saveUnknownIntent(input, "ตอนนี้เลขาคนนี้ถนัด todo, รายรับ, รายจ่าย, นัดหมาย, เตือนความจำ, note และสรุปพรุ่งนี้ค่ะ ส่งงานแนวนี้มาได้เลยค่ะ")
+}
+
+// handleHelp สร้างข้อความแนะนำวิธีใช้งาน assistant
+// input: AssistantMessageInput, text ข้อความดิบที่เป็นคำสั่งขอความช่วยเหลือ, now เวลาปัจจุบัน
+// output: AssistantMessageResult สำหรับ assistant_help หรือ error จาก intent repository
+func (s *assistantService) handleHelp(input types.AssistantMessageInput, text string, now time.Time) (*types.AssistantMessageResult, error) {
+	entitiesJSON := marshalEntities(map[string]any{"text": text})
+	intent, err := s.intentRepo.Create(&entities.AssistantIntent{
+		UserID:       input.UserID,
+		MessageLogID: input.MessageLogID,
+		Intent:       "assistant_help",
+		Confidence:   0.95,
+		Entities:     entitiesJSON,
+		Status:       "completed",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &types.AssistantMessageResult{
+		Intent:    intent.Intent,
+		ReplyText: helpnlp.FormatReply(),
+		Data:      map[string]any{"help": true},
+	}, nil
 }
 
 // handleCreateTodo สร้าง todo จากข้อความที่ parser ตีความแล้วว่าเป็น todo

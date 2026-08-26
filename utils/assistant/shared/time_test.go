@@ -100,6 +100,8 @@ func TestExtractHourMinuteDetailedThaiTime(t *testing.T) {
 		{name: "ten half", text: "ซื้อข้าวตอน 10 โมงครึ่ง", wantHour: 10, wantMinute: 30},
 		{name: "dot clock", text: "ซื้อข้าวตอน 10.30น.", wantHour: 10, wantMinute: 30},
 		{name: "tuum minutes", text: "ได้เงิน 4 ทุ่ม 23 นาที", wantHour: 22, wantMinute: 23},
+		{name: "afternoon one", text: "เตือนประชุมตอนบ่ายโมง", wantHour: 13, wantMinute: 0},
+		{name: "afternoon one half", text: "เตือนประชุมตอนบ่ายโมงครึ่ง", wantHour: 13, wantMinute: 30},
 		{name: "afternoon half", text: "บ่าย 2 ครึ่ง ซื้อกาแฟ", wantHour: 14, wantMinute: 30},
 		{name: "evening", text: "กินข้าว 6 โมงเย็น", wantHour: 18, wantMinute: 0},
 		{name: "colon clock", text: "ซื้อกาแฟ 14:30", wantHour: 14, wantMinute: 30},

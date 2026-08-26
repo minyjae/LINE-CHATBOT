@@ -119,13 +119,16 @@ func extractThaiShortClockTime(text string) (int, int, bool) {
 	return 0, 0, false
 }
 
-// extractThaiAfternoonTime parse เวลาแบบ "บ่าย X"
-// input: text เช่น "บ่าย 2", "บ่าย 2 ครึ่ง", "บ่าย 2 โมง 15 นาที"
+// extractThaiAfternoonTime parse เวลาแบบ "บ่าย X" หรือ "บ่ายโมง"
+// input: text เช่น "บ่ายโมง", "บ่ายโมงครึ่ง", "บ่าย 2", "บ่าย 2 ครึ่ง", "บ่าย 2 โมง 15 นาที"
 // output: hour/minute ในรูปแบบ 24 ชั่วโมง, bool เป็น true เมื่อ match
 func extractThaiAfternoonTime(text string) (int, int, bool) {
-	re := regexp.MustCompile(`บ่าย\s*(\d{1,2})(?:\s*โมง)?(?:\s*(ครึ่ง|\d{1,2}(?:\s*นาที)?))?`)
+	re := regexp.MustCompile(`บ่าย\s*(?:โมง|(\d{1,2})(?:\s*โมง)?)(?:\s*(ครึ่ง|\d{1,2}(?:\s*นาที)?))?`)
 	if match := re.FindStringSubmatch(text); len(match) == 3 {
-		hour, _ := strconv.Atoi(match[1])
+		hour := 1
+		if match[1] != "" {
+			hour, _ = strconv.Atoi(match[1])
+		}
 		minute := parseThaiMinuteSuffix(match[2])
 		return validHourMinute(normalizeThaiHour(match[0], hour), minute)
 	}
